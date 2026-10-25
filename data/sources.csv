@@ -1,21 +1,25 @@
-company,ticker,fy,url,confidence,notes
-Reliance Industries,RELIANCE,FY24,https://www.ril.com/ar2023-24/pdf/RIL_IAR_2024.pdf,high,Integrated Annual Report 2023-24
-Reliance Industries,RELIANCE,FY25,https://www.ril.com/ar2024-25/pdf/RIL-IAR-2025.pdf,high,Integrated Annual Report 2024-25
-Tata Consultancy Services,TCS,FY24,https://www.tcs.com/content/dam/tcs/investor-relations/financial-statements/2023-24/ar/annual-report-2023-2024.pdf,medium,URL inferred from FY25 pattern; serves the full report
-Tata Consultancy Services,TCS,FY25,https://www.tcs.com/content/dam/tcs/investor-relations/financial-statements/2024-25/ar/annual-report-2024-2025.pdf,high,Integrated Annual Report 2024-25
-Infosys,INFY,FY24,https://www.infosys.com/investors/reports-filings/annual-report/annual/documents/infosys-ar-24.pdf,high,Integrated Annual Report 2023-24
-Infosys,INFY,FY25,https://www.infosys.com/investors/reports-filings/annual-report/annual/documents/infosys-ar-25.pdf,high,Integrated Annual Report 2024-25
-HDFC Bank,HDFCBANK,FY24,https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/pdf/annual-reports/2023-24/integrated-annual-report-2023-24.pdf,high,Integrated Annual Report 2023-24
-HDFC Bank,HDFCBANK,FY25,https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/pdf/annual-reports/2024-25/HDFC_Bank_Annual_Report_2024_25-310202.pdf,high,Integrated Annual Report 2024-25
-ICICI Bank,ICICIBANK,FY24,https://www.icici.bank.in/content/dam/icicibank/managed-assets/docs/investor/annual-reports/2024/icici-bank-integrated-report-2023-24.pdf,high,Integrated Report only (6 MB). ICICI publishes Board's Report / MD&A / financials as separate PDFs in the same folder - add later if needed
-ICICI Bank,ICICIBANK,FY25,https://www.icici.bank.in/content/dam/icicibank/managed-assets/docs/investor/annual-reports/2025/icici-bank-integrated-report-2024-25.pdf,high,Integrated Report only (10 MB). Financials separate: icici-bank-2025-financial-statements.pdf
-Bajaj Finance,BAJFINANCE,FY24,https://www.bajajfinserv.in/finance-digital-annual-report-fy24/bajaj-finance-ltd-ar-2023-24-assets/pdf/annual-report-fy2024.pdf,high,37th Annual Report 2023-24
-Bajaj Finance,BAJFINANCE,FY25,https://www.bajajfinserv.in/finance-digital-annual-report-fy25/bajaj-finance-ltd-ar-2024-25-assets/pdf/annual-report-fy2025.pdf,high,38th Annual Report 2024-25
-Tata Motors,TATAMOTORS,FY24,https://nsearchives.nseindia.com/annual_reports/AR_24058_TATAMOTORS_2023_2024_310520242633.pdf,medium,NSE filing copy (full report + AGM notice); tatamotors.com blocks scripted downloads; ~20 MB
-Tata Motors,TATAMOTORS,FY25,https://www.bseindia.com/xml-data/corpfiling/AttachHis/18f91098-8691-409d-b771-808c48964a4f.pdf,low,BSE filing; unverified - BSE blocks bots. If it fails download by hand from tatamotors.com/investors/annual-reports (~48 MB)
-Sun Pharmaceutical Industries,SUNPHARMA,FY24,https://sunpharma.com/wp-content/uploads/2024/07/SPIL-Annual-Report-2023-24.pdf,medium,URL inferred from FY25 pattern; serves the report. Alt: https://nsearchives.nseindia.com/annual_reports/AR_24355_SUNPHARMA_2023_2024_08072024153247.pdf
-Sun Pharmaceutical Industries,SUNPHARMA,FY25,https://sunpharma.com/wp-content/uploads/2025/07/SPIL-Annual-Report-2024-25.pdf,high,Annual Report 2024-25
-Hindustan Unilever,HINDUNILVR,FY24,https://www.hul.co.in/files/annual-report-2023-24.pdf,high,Integrated Annual Report 2023-24; 21 MB
-Hindustan Unilever,HINDUNILVR,FY25,https://www.hul.co.in/files/integrated-annual-report-2024-25.pdf,high,Integrated Annual Report 2024-25; 28 MB
-Larsen & Toubro,LT,FY24,https://www.bseindia.com/xml-data/corpfiling/AttachHis/b59765b4-ed42-48bd-afad-7caa4417d85d.pdf,low,BSE filing; unverified. If it fails download by hand from investors.larsentoubro.com/AnnualReports.aspx (~18 MB)
-Larsen & Toubro,LT,FY25,https://www.bseindia.com/xml-data/corpfiling/AttachHis/63959ce8-b641-4bd4-9a62-43ab52301856.pdf,low,BSE filing; unverified. If it fails download by hand from investors.larsentoubro.com/AnnualReports.aspx (26 MB)
+company,ticker,fy,part,url,confidence,notes
+Reliance Industries,RELIANCE,FY24,,https://www.ril.com/ar2023-24/pdf/RIL_IAR_2024.pdf,high,Integrated Annual Report 2023-24
+Reliance Industries,RELIANCE,FY25,,https://www.ril.com/ar2024-25/pdf/RIL-IAR-2025.pdf,high,Integrated Annual Report 2024-25
+Tata Consultancy Services,TCS,FY24,,https://www.tcs.com/content/dam/tcs/investor-relations/financial-statements/2023-24/ar/annual-report-2023-2024.pdf,medium,URL inferred from FY25 pattern; serves the full report
+Tata Consultancy Services,TCS,FY25,,https://www.tcs.com/content/dam/tcs/investor-relations/financial-statements/2024-25/ar/annual-report-2024-2025.pdf,high,Integrated Annual Report 2024-25
+Infosys,INFY,FY24,,https://www.infosys.com/investors/reports-filings/annual-report/annual/documents/infosys-ar-24.pdf,high,Integrated Annual Report 2023-24
+Infosys,INFY,FY25,,https://www.infosys.com/investors/reports-filings/annual-report/annual/documents/infosys-ar-25.pdf,high,Integrated Annual Report 2024-25
+HDFC Bank,HDFCBANK,FY24,,https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/pdf/annual-reports/2023-24/integrated-annual-report-2023-24.pdf,high,Integrated Annual Report 2023-24
+HDFC Bank,HDFCBANK,FY25,,https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/pdf/annual-reports/2024-25/HDFC_Bank_Annual_Report_2024_25-310202.pdf,high,Integrated Annual Report 2024-25
+ICICI Bank,ICICIBANK,FY24,,https://www.icici.bank.in/content/dam/icicibank/managed-assets/docs/investor/annual-reports/2024/icici-bank-integrated-report-2023-24.pdf,high,Integrated Report only (6 MB). ICICI publishes Board's Report / MD&A / financials as separate PDFs in the same folder - add later if needed
+ICICI Bank,ICICIBANK,FY25,,https://www.icici.bank.in/content/dam/icicibank/managed-assets/docs/investor/annual-reports/2025/icici-bank-integrated-report-2024-25.pdf,high,Integrated Report only (10 MB). Financials separate: icici-bank-2025-financial-statements.pdf
+Bajaj Finance,BAJFINANCE,FY24,,https://www.bajajfinserv.in/finance-digital-annual-report-fy24/bajaj-finance-ltd-ar-2023-24-assets/pdf/annual-report-fy2024.pdf,high,37th Annual Report 2023-24
+Bajaj Finance,BAJFINANCE,FY25,,https://www.bajajfinserv.in/finance-digital-annual-report-fy25/bajaj-finance-ltd-ar-2024-25-assets/pdf/annual-report-fy2025.pdf,high,38th Annual Report 2024-25
+Tata Motors,TATAMOTORS,FY24,,https://nsearchives.nseindia.com/annual_reports/AR_24058_TATAMOTORS_2023_2024_310520242633.pdf,medium,NSE filing copy (full report + AGM notice); tatamotors.com blocks scripted downloads; ~20 MB
+Tata Motors,TATAMOTORS,FY25,,https://www.bseindia.com/xml-data/corpfiling/AttachHis/18f91098-8691-409d-b771-808c48964a4f.pdf,low,BSE filing; unverified - BSE blocks bots. If it fails download by hand from tatamotors.com/investors/annual-reports (~48 MB)
+Sun Pharmaceutical Industries,SUNPHARMA,FY24,,https://sunpharma.com/wp-content/uploads/2024/07/SPIL-Annual-Report-2023-24.pdf,medium,URL inferred from FY25 pattern; serves the report. Alt: https://nsearchives.nseindia.com/annual_reports/AR_24355_SUNPHARMA_2023_2024_08072024153247.pdf
+Sun Pharmaceutical Industries,SUNPHARMA,FY25,,https://sunpharma.com/wp-content/uploads/2025/07/SPIL-Annual-Report-2024-25.pdf,high,Annual Report 2024-25
+Hindustan Unilever,HINDUNILVR,FY24,,https://www.hul.co.in/files/annual-report-2023-24.pdf,high,Integrated Annual Report 2023-24; 21 MB
+Hindustan Unilever,HINDUNILVR,FY25,,https://www.hul.co.in/files/integrated-annual-report-2024-25.pdf,high,Integrated Annual Report 2024-25; 28 MB
+Larsen & Toubro,LT,FY24,,https://www.bseindia.com/xml-data/corpfiling/AttachHis/b59765b4-ed42-48bd-afad-7caa4417d85d.pdf,low,BSE filing; unverified. If it fails download by hand from investors.larsentoubro.com/AnnualReports.aspx (~18 MB)
+Larsen & Toubro,LT,FY25,,https://www.bseindia.com/xml-data/corpfiling/AttachHis/63959ce8-b641-4bd4-9a62-43ab52301856.pdf,low,BSE filing; unverified. If it fails download by hand from investors.larsentoubro.com/AnnualReports.aspx (26 MB)
+ICICI Bank,ICICIBANK,FY24,fs,https://www.icici.bank.in/content/dam/icicibank/managed-assets/docs/investor/annual-reports/2024/icici-bank-2024-financial-statements.pdf,medium,Separate consolidated+standalone financial statements PDF (ICICI splits its annual report into parts)
+ICICI Bank,ICICIBANK,FY25,fs,https://www.icici.bank.in/content/dam/icicibank/managed-assets/docs/investor/annual-reports/2025/icici-bank-2025-financial-statements.pdf,medium,Separate financial statements PDF
+ICICI Bank,ICICIBANK,FY24,boards,https://www.icici.bank.in/content/dam/icicibank/managed-assets/docs/investor/annual-reports/2024/icici-bank-ar-2024-boards-report.pdf,medium,Separate Board's Report PDF; MD&A for ICICI is a separate PDF too - filename unknown; add when found
+ICICI Bank,ICICIBANK,FY25,boards,https://www.icici.bank.in/content/dam/icicibank/managed-assets/docs/investor/annual-reports/2025/icici-bank-ar-2025-boards-report.pdf,low,URL inferred from FY24 pattern

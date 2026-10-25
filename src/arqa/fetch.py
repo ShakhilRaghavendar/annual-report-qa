@@ -49,10 +49,13 @@ class Source:
     ticker: str
     fy: str
     url: str
+    part: str = ""   # "" for the main report; e.g. "fs" when a company splits
+                     # its report into several PDFs (ICICI Bank does)
 
     @property
     def filename(self) -> str:
-        return f"{self.ticker}_{self.fy}.pdf"
+        suffix = f"_{self.part}" if self.part else ""
+        return f"{self.ticker}_{self.fy}{suffix}.pdf"
 
     @property
     def path(self) -> Path:
@@ -73,6 +76,7 @@ def load_sources(csv_path: Path = SOURCES_CSV) -> list[Source]:
                     ticker=row["ticker"].strip().upper(),
                     fy=row["fy"].strip().upper(),
                     url=url,
+                    part=(row.get("part") or "").strip().lower(),
                 )
             )
     return sources

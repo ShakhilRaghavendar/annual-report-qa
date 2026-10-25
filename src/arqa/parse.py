@@ -4,16 +4,21 @@ parse.py — turn an annual-report PDF into a list of sections with page numbers
 This is the hard, unglamorous part of the project. Indian annual reports are
 designed documents: multi-column layouts, headings that are images, chapter
 names that differ by company ("Management Discussion and Analysis" is a
-chapter at Infosys and a sub-heading inside the Directors' Report elsewhere).
+chapter at Infosys, a sub-heading inside the Board's Report at HUL, and
+"Management Discussion and Analysis — Business Overview" at Reliance).
 
-v0 strategy (deliberately simple; we tune it per company after seeing real PDFs):
-  1. Extract text page by page with PyMuPDF, keeping the page number.
-  2. Scan each page for lines that look like one of our TARGET section headings
-     (regex match, case-insensitive, short line, mostly letters).
-  3. A heading match opens a new section; every following page belongs to it
-     until the next heading match.
-  4. Pages before the first match go to a "front_matter" bucket; anything we
-     couldn't classify stays as "other" so nothing is silently lost.
+v1 strategy (v0 lessons are in the README's "parsing notes"):
+  1. Extract text page by page with PyMuPDF, with sort=True so the page header
+     (where chapter names live) comes out first, not wherever the PDF's internal
+     block order happens to put it.
+  2. Scan the first N non-empty lines of each page for a heading we recognise.
+     Two kinds: TARGET sections we want to keep, and CLOSER headings (governance
+     report, BRSR, standalone statements, AGM notice) that we don't want but
+     must detect, otherwise the previous section swallows them.
+  3. When several patterns match on one page, the most specific wins. v0 let a
+     generic "Dear Shareholders" pattern beat "DIRECTORS' REPORT" — that is why
+     HDFC's Directors' Report was labelled as the Chairman's letter.
+  4. A heading opens a new section; a repeated heading (running header) does not.
 
 Run:
     python -m arqa.parse                       # parse everything in data/raw
@@ -22,7 +27,7 @@ Run:
 
 Output:
     data/processed/<TICKER>_<FY>.jsonl   one JSON object per section:
-        {"company","ticker","fy","section","section_key","page_start","page_end","text"}
+        {"company","ticker","fy","part","section","section_key","page_start","page_end","text"}
 """
 
 from __future__ import annotations
@@ -33,64 +38,64 @@ import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-import fitz  # PyMuPDF
-
 ROOT = Path(__file__).resolve().parents[2]
 RAW_DIR = ROOT / "data" / "raw"
 PROCESSED_DIR = ROOT / "data" / "processed"
 
-# --- The sections we care about ------------------------------------------------
-# key -> list of regex patterns that identify the heading line.
-# Order matters only for the report; matching is independent.
-# Keep patterns loose: "Management Discussion & Analysis", "Management's
-# Discussion and Analysis", "MD&A" should all hit the same key.
-TARGET_SECTIONS: dict[str, list[str]] = {
-    "chairman_letter": [
-        r"^(chairman|chairperson|ceo|md\s*&\s*ceo|managing director)['’]?s?\s+(message|letter|statement|address|communiqu[eé])",
-        r"^(message|letter)\s+from\s+the\s+(chairman|ceo|managing director)",
-        r"^dear\s+(share|stake)holders",
-    ],
-    "mdna": [
-        r"^management['’]?s?\s+discussion\s+(and|&)\s+analysis",
-        r"^md\s*&\s*a\b",
-    ],
-    "directors_report": [
-        r"^(board['’]?s?|directors['’]?)\s+report",
-        r"^report\s+of\s+the\s+(board|directors)",
-    ],
-    "risk_management": [
-        r"^(enterprise\s+)?risk\s+management",
-        r"^risks?\s+(and|&)\s+(opportunities|mitigation|concerns)",
-        r"^(key|principal)\s+risks?",
-    ],
-    "financial_statements": [
-        r"^consolidated\s+(financial\s+statements|balance\s+sheet)",
-        r"^(independent\s+)?auditor['’]?s?\s+report\s+on\s+(the\s+)?consolidated",
-        r"^notes\s+(forming\s+part\s+of|to)\s+(the\s+)?consolidated",
-    ],
-}
+# --- Headings ------------------------------------------------------------------
+# Each entry: (section_key, priority, regex). Higher priority wins when more than
+# one pattern matches on the same page. Keep patterns anchored at the start of
+# the line (^) so table-of-contents rows like "58  Board's report" don't fire.
+#
+# Apostrophes: PDFs use ' (U+0027) and ’ (U+2019) interchangeably — hence ['’].
+APOS = "['’]"
 
-# Compile once. Each entry: (section_key, compiled_regex)
-_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    (key, re.compile(p, re.IGNORECASE)) for key, pats in TARGET_SECTIONS.items() for p in pats
+HEADINGS: list[tuple[str, int, str]] = [
+    # --- target sections --------------------------------------------------
+    ("directors_report", 90, rf"^(board|directors){APOS}?s?\s+report\b"),
+    ("directors_report", 90, r"^report\s+of\s+(the\s+)?board\s+of\s+directors"),   # HUL
+    ("directors_report", 90, r"^report\s+of\s+the\s+(board|directors)\b"),
+
+    ("mdna", 85, rf"^management{APOS}?s?\s+discussion\s+(and|&)\s+analysis"),
+    ("mdna", 85, r"^md\s*&\s*a\b"),
+
+    ("financial_statements", 80, r"^consolidated\s+(financial\s+statements|balance\s+sheet|statement\s+of\s+profit)"),
+    ("financial_statements", 80, rf"^(independent\s+)?auditor{APOS}?s?\s+report\s+on\s+(the\s+)?consolidated"),
+    ("financial_statements", 80, r"^notes\s+(forming\s+part\s+of|to)\s+(the\s+)?consolidated"),
+
+    ("risk_management", 70, r"^(enterprise\s+|integrated\s+)?risk\s+management\b"),
+    ("risk_management", 70, r"^risks?\s+(and|&)\s+(opportunities|mitigation|concerns)"),
+    ("risk_management", 70, r"^(key|principal|material)\s+risks?\b"),
+
+    ("chairman_letter", 60, rf"^(chairman|chairperson|ceo|cmd|md|managing\s+director)(\s*(and|&)\s*(managing\s+director|ceo|md))?{APOS}?s?\s+(message|letter|statement|address|review|communiqu)"),
+    ("chairman_letter", 60, r"^(message|letter|statement)\s+from\s+(the\s+)?(chairman|chairperson|ceo|managing\s+director)"),
+    ("chairman_letter", 60, r"^from\s+the\s+(chairman|ceo)"),
+
+    # --- closers: chapters we don't keep, but must recognise so they END the
+    #     previous section instead of being absorbed into it -----------------
+    ("other", 50, r"^(report\s+on\s+)?corporate\s+governance(\s+report)?\b"),
+    ("other", 50, r"^business\s+responsibility\s+(and|&)\s+sustainability"),
+    ("other", 50, r"^brsr\b"),
+    ("other", 50, r"^standalone\s+(financial\s+statements|balance\s+sheet|statement\s+of\s+profit)"),
+    ("other", 50, rf"^(independent\s+)?auditor{APOS}?s?\s+report\s+on\s+(the\s+)?standalone"),
+    ("other", 50, r"^notice\s+(of|is\s+hereby|convening)\b"),
+    ("other", 50, r"^notice$"),
+    ("other", 50, r"^(secretarial\s+audit|dividend\s+distribution\s+policy|nomination\s+and\s+remuneration)"),
+    ("other", 50, r"^(ten|10|five|5)[-\s]year\s+(financial\s+)?(highlights|summary)"),
+    ("other", 50, r"^(form\s+aoc|form\s+mgt|form\s+mr)[-\s]?\d"),
 ]
 
-# A heading is a SHORT line. Body text that happens to start with "risk management"
-# mid-paragraph should not open a new section. 90 chars is generous.
+_PATTERNS: list[tuple[str, int, re.Pattern[str]]] = [
+    (key, prio, re.compile(pat, re.IGNORECASE)) for key, prio, pat in HEADINGS
+]
+
+# Headings sit at the top of a page. We look a little deeper than v0 (15 → 20
+# lines) because some designed pages carry a logo line, a page number and a
+# running "Integrated Annual Report 2024-25" label above the chapter name.
+TOP_LINES = 20
+# A heading is a SHORT line; body text that happens to start with "risk
+# management" mid-sentence should not open a new section.
 MAX_HEADING_LEN = 90
-
-
-@dataclass
-class Section:
-    company: str
-    ticker: str
-    fy: str
-    section: str        # human label, e.g. "Management Discussion & Analysis"
-    section_key: str    # stable key, e.g. "mdna"
-    page_start: int     # 1-based, inclusive
-    page_end: int       # 1-based, inclusive
-    text: str
-
 
 SECTION_LABELS = {
     "front_matter": "Front matter",
@@ -101,40 +106,109 @@ SECTION_LABELS = {
     "financial_statements": "Consolidated Financial Statements",
     "other": "Other",
 }
+TARGET_KEYS = ["chairman_letter", "mdna", "directors_report", "risk_management", "financial_statements"]
 
 
+@dataclass
+class Section:
+    company: str
+    ticker: str
+    fy: str
+    part: str           # "" for the main report; e.g. "fs" for ICICI's separate financial-statements PDF
+    section: str        # human label
+    section_key: str    # stable key
+    page_start: int     # 1-based, inclusive
+    page_end: int       # 1-based, inclusive
+    text: str
+
+
+# --- Text extraction ---------------------------------------------------------------
 def extract_pages(pdf_path: Path) -> list[str]:
-    """Return a list of page texts; index 0 is page 1."""
+    """Return a list of page texts; index 0 is page 1. Imported lazily so the
+    pure-logic functions below can be unit-tested without PyMuPDF installed."""
+    import fitz  # PyMuPDF
+
     doc = fitz.open(pdf_path)
-    pages: list[str] = []
-    for page in doc:
-        # "text" mode gives reading-order text; good enough for v0.
-        # Multi-column layouts can interleave columns — we'll revisit with
-        # page.get_text("blocks") if it bites us.
-        pages.append(page.get_text("text"))
+    # sort=True orders blocks top-to-bottom, left-to-right. Without it, the
+    # running header can come out AFTER the body text and heading detection
+    # on the "top lines" misses it (the HDFC Directors' Report problem).
+    pages = [page.get_text("text", sort=True) for page in doc]
     doc.close()
     return pages
 
 
-def detect_heading(page_text: str) -> str | None:
+# --- Heading detection -------------------------------------------------------------
+# Table-of-contents rows look like headings but aren't: "Chairman's Message ....... 08"
+_TOC_ROW = re.compile(r"(\.{3,}|\s\d{1,3})\s*$")
+# A line that recurs at the top of this share of pages is a navigation band or
+# running label ("Integrated Annual Report 2024-25"), not a chapter heading.
+BOILERPLATE_SHARE = 0.25
+
+
+def top_lines(page_text: str) -> list[str]:
+    """The first TOP_LINES non-empty, stripped lines of a page."""
+    return [ln.strip() for ln in page_text.splitlines() if ln.strip()][:TOP_LINES]
+
+
+def find_boilerplate(pages: list[str]) -> set[str]:
+    """Lines that appear in the top region of >= BOILERPLATE_SHARE of pages.
+    L&T and HUL print a nav strip ('Corporate Overview | Management Discussion
+    and Analysis | ...') on every page; without this filter every page looks
+    like the start of the MD&A."""
+    if len(pages) < 8:
+        return set()
+    counts: dict[str, int] = {}
+    for p in pages:
+        for ln in set(top_lines(p)):
+            if len(ln) <= MAX_HEADING_LEN:
+                counts[ln] = counts.get(ln, 0) + 1
+    threshold = max(4, int(len(pages) * BOILERPLATE_SHARE))
+    return {ln for ln, c in counts.items() if c >= threshold}
+
+
+def heading_candidates(page_text: str, boilerplate: set[str] = frozenset()) -> list[tuple[int, int, str]]:
     """
-    Look at the first ~15 non-empty lines of a page for a target heading.
-    Headings sit at the top of a page in nearly every annual report, so we don't
-    scan the whole page — that would catch running headers and cross-references.
-    Returns the section_key or None.
+    All headings found in the top lines of a page, as (priority, -line_index, key),
+    best first. Adjacent short lines are also tried joined ("Chairman's" +
+    "Statement" at L&T), and TOC rows / boilerplate lines are skipped.
     """
-    lines = [ln.strip() for ln in page_text.splitlines() if ln.strip()]
-    for ln in lines[:15]:
-        if len(ln) > MAX_HEADING_LEN:
+    lines = top_lines(page_text)
+    texts: list[tuple[int, str]] = []
+    for idx, ln in enumerate(lines):
+        if ln in boilerplate or len(ln) > MAX_HEADING_LEN or _TOC_ROW.search(ln):
             continue
-        for key, pat in _PATTERNS:
-            if pat.search(ln):
-                return key
+        texts.append((idx, ln))
+        if idx + 1 < len(lines):
+            nxt = lines[idx + 1]
+            if nxt not in boilerplate and len(ln) + len(nxt) <= MAX_HEADING_LEN:
+                texts.append((idx, f"{ln} {nxt}"))
+
+    found: list[tuple[int, int, str]] = []
+    for idx, text in texts:
+        for key, prio, pat in _PATTERNS:
+            if pat.search(text):
+                found.append((prio, -idx, key))
+                break
+    found.sort(reverse=True)
+    return found
+
+
+def detect_heading(page_text: str, current_key: str | None = None, boilerplate: set[str] = frozenset()) -> str | None:
+    """
+    Return the section_key this page should open, or None to stay in the
+    current section. The best heading that is NOT the current section wins —
+    so a chapter's running header is ignored, but a sub-chapter heading below
+    it (HDFC's MD&A inside the Directors' Report) is honoured.
+    """
+    for _prio, _negidx, key in heading_candidates(page_text, boilerplate):
+        if key != current_key:
+            return key
     return None
 
 
-def split_into_sections(pages: list[str], company: str, ticker: str, fy: str) -> list[Section]:
-    """Walk the pages, opening a new section whenever a heading is detected."""
+def split_into_sections(pages: list[str], company: str, ticker: str, fy: str, part: str = "") -> list[Section]:
+    """Walk the pages, opening a new section whenever a different heading is detected."""
+    boilerplate = find_boilerplate(pages)
     sections: list[Section] = []
     current_key = "front_matter"
     current_start = 1
@@ -145,7 +219,7 @@ def split_into_sections(pages: list[str], company: str, ticker: str, fy: str) ->
         if text:
             sections.append(
                 Section(
-                    company=company, ticker=ticker, fy=fy,
+                    company=company, ticker=ticker, fy=fy, part=part,
                     section=SECTION_LABELS.get(current_key, current_key),
                     section_key=current_key,
                     page_start=current_start, page_end=end_page, text=text,
@@ -153,25 +227,59 @@ def split_into_sections(pages: list[str], company: str, ticker: str, fy: str) ->
             )
 
     for i, page_text in enumerate(pages, start=1):
-        key = detect_heading(page_text)
-        # Open a new section only if the heading differs from the current one;
-        # running headers repeat the chapter name on every page.
+        key = detect_heading(page_text, current_key, boilerplate)
         if key and key != current_key:
             flush(end_page=i - 1)
             current_key, current_start, buffer = key, i, []
         buffer.append(page_text)
 
     flush(end_page=len(pages))
+    return merge_flapping(sections)
+
+
+def merge_flapping(sections: list[Section], max_pages: int = 2) -> list[Section]:
+    """
+    Top-of-page heuristics flap when a chapter's running header and a
+    sub-heading alternate (HUL: Board's Report / MD&A / Board's Report / MD&A,
+    one page each). A short section (<= max_pages) sandwiched between two
+    sections of the same key is absorbed into them — unless that would
+    dissolve a target section into 'other', which we never do.
+    """
+    changed = True
+    while changed and len(sections) >= 3:
+        changed = False
+        for i in range(1, len(sections) - 1):
+            prev, cur, nxt = sections[i - 1], sections[i], sections[i + 1]
+            short = (cur.page_end - cur.page_start + 1) <= max_pages
+            same_neighbours = prev.section_key == nxt.section_key and prev.section_key != cur.section_key
+            protect = cur.section_key in TARGET_KEYS and prev.section_key == "other"
+            if short and same_neighbours and not protect:
+                merged = Section(
+                    company=prev.company, ticker=prev.ticker, fy=prev.fy, part=prev.part,
+                    section=prev.section, section_key=prev.section_key,
+                    page_start=prev.page_start, page_end=nxt.page_end,
+                    text="\n".join([prev.text, cur.text, nxt.text]),
+                )
+                sections[i - 1:i + 2] = [merged]
+                changed = True
+                break
     return sections
 
 
+# --- File-level helpers ------------------------------------------------------------
+def parse_stem(stem: str) -> tuple[str, str, str]:
+    """'INFY_FY25' -> ('INFY','FY25',''); 'ICICIBANK_FY25_fs' -> ('ICICIBANK','FY25','fs')."""
+    bits = stem.split("_")
+    ticker = bits[0]
+    fy = bits[1] if len(bits) > 1 else ""
+    part = "_".join(bits[2:]) if len(bits) > 2 else ""
+    return ticker, fy, part
+
+
 def parse_file(pdf_path: Path, company: str | None = None) -> list[Section]:
-    """Parse one PDF named <TICKER>_<FY>.pdf into sections."""
-    stem = pdf_path.stem                      # e.g. "INFY_FY25"
-    ticker, _, fy = stem.partition("_")
-    company = company or ticker               # sources.csv has the nice name; fine for v0
+    ticker, fy, part = parse_stem(pdf_path.stem)
     pages = extract_pages(pdf_path)
-    return split_into_sections(pages, company=company, ticker=ticker, fy=fy)
+    return split_into_sections(pages, company=company or ticker, ticker=ticker, fy=fy, part=part)
 
 
 def write_jsonl(sections: list[Section], out_path: Path) -> None:
@@ -182,13 +290,14 @@ def write_jsonl(sections: list[Section], out_path: Path) -> None:
 
 
 def report(sections: list[Section]) -> str:
-    """A compact table: section, pages, characters — so you can eyeball a parse."""
+    """A compact table so you can eyeball a parse. 'Other' rows are collapsed to
+    one line per run because they are the chapters we deliberately drop."""
     rows = [f"  {'section':<36} {'pages':>9} {'chars':>9}"]
     for s in sections:
         pages = f"{s.page_start}-{s.page_end}"
         rows.append(f"  {s.section:<36} {pages:>9} {len(s.text):>9,}")
     found = {s.section_key for s in sections}
-    missing = [SECTION_LABELS[k] for k in TARGET_SECTIONS if k not in found]
+    missing = [SECTION_LABELS[k] for k in TARGET_KEYS if k not in found]
     if missing:
         rows.append(f"  MISSING: {', '.join(missing)}")
     return "\n".join(rows)
