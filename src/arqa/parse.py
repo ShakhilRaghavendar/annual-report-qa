@@ -303,8 +303,28 @@ def report(sections: list[Section]) -> str:
     return "\n".join(rows)
 
 
+def peek(stem: str, page_numbers: list[int]) -> None:
+    """Debug helper: show the top lines of given pages exactly as the parser sees
+    them, plus the heading candidates. Usage: python -m arqa.parse --peek HDFCBANK_FY25 203 209"""
+    pdf = RAW_DIR / f"{stem}.pdf"
+    pages = extract_pages(pdf)
+    bp = find_boilerplate(pages)
+    print(f"{pdf.name}: {len(pages)} pages; boilerplate lines: {sorted(bp)[:6]}")
+    for n in page_numbers:
+        text = pages[n - 1]
+        print(f"\n--- page {n} ---")
+        for i, ln in enumerate(top_lines(text)):
+            flag = " [boilerplate]" if ln in bp else ""
+            print(f"  {i:>2}: {ln[:100]}{flag}")
+        print(f"  candidates: {heading_candidates(text, bp)[:5]}")
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    if "--peek" in argv:
+        i = argv.index("--peek")
+        peek(argv[i + 1], [int(x) for x in argv[i + 2:]])
+        return 0
     only = argv[argv.index("--only") + 1] if "--only" in argv else None
     report_only = "--report" in argv
 
