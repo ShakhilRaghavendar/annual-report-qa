@@ -1,0 +1,32 @@
+# Data that is downloaded or generated — never committed
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+index_store/
+model_cache/
+chroma/
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Notebooks: keep the files, drop the outputs
+notebooks/.ipynb_checkpoints/
+
+# Setup/run helpers and their logs (local convenience only)
+*.bat
+*_log.txt

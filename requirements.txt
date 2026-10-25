@@ -1,0 +1,29 @@
+# Core
+requests==2.32.3
+pymupdf==1.24.14
+pdfplumber==0.11.4
+tiktoken==0.8.0
+pandas==2.2.3
+pydantic==2.9.2
+python-dotenv==1.0.1
+tqdm==4.67.1
+
+# Retrieval
+# (Chroma was dropped: its chroma-hnswlib dependency needs a C++ compiler on
+#  Python 3.13 / Windows. FAISS ships pre-built wheels and is the more common
+#  choice in production anyway.)
+rank-bm25==0.2.2
+faiss-cpu>=1.9.0
+sentence-transformers==3.3.1
+
+# LLM (pick one; both listed so either works)
+openai==1.57.0
+anthropic==0.40.0
+
+# Interface
+typer==0.15.1
+fastapi==0.115.6
+uvicorn==0.32.1
+
+# Tests
+pytest==8.3.4
