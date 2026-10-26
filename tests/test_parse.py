@@ -55,9 +55,20 @@ def test_closers_end_a_section():
 
 def test_toc_rows_and_long_lines_ignored():
     assert detect_heading("Chairman's Message ........................ 08") is None
-    assert detect_heading("Risk Management   42") is None
     body = "In this section of the management discussion and analysis we describe " * 3
     assert detect_heading(body) is None
+
+
+def test_running_header_page_numbers_are_stripped():
+    # TCS: page number before or after the chapter name on every page.
+    assert detect_heading("79    Management Discussion and Analysis\nOverview") == "mdna"
+    assert detect_heading("Management Discussion and Analysis     80\nStrategy") == "mdna"
+    assert detect_heading("Board's Report     78\nWe further report") == "directors_report"
+
+
+def test_three_line_title_and_letter_spacing():
+    assert detect_heading("Management\nDiscussion and\nAnalysis\nOverview of the Industry") == "mdna"   # TCS
+    assert detect_heading("D I R E C T O R S ’ R E P O R T\nDear Shareholders,") == "directors_report"  # HDFC
 
 
 def test_running_header_does_not_reopen_but_subheading_does():
@@ -66,13 +77,51 @@ def test_running_header_does_not_reopen_but_subheading_does():
     assert detect_heading("DIRECTORS’ REPORT\nbody text", current_key="directors_report") is None
 
 
+def test_broken_kerning_still_matches():
+    # TCS's PDF encoding scatters spaces inside words.
+    assert detect_heading("Boar d's Report\nDear Members") == "directors_report"
+    assert detect_heading("Man  ag ement Discussion an d Anal ysis") == "mdna"
+    assert detect_heading("Letter from the Chai rman") == "chairman_letter"
+
+
+def test_contents_page_with_leading_page_numbers_is_skipped():
+    page = "\n".join([
+        "3      Content", "Statutory Section", "39     Shareholder Connect", "41    Notice",
+        "67     Board's Report", "79    Management Discussion and Analysis",
+        "95    Corporate Governance Report", "Consolidated Financial Statements   Transforming Telecoms",
+    ])
+    assert detect_heading(page) is None
+
+
+def test_contents_rule_only_applies_to_the_front_of_the_report():
+    # A balance sheet has many lines starting with a note number; it is not a contents page.
+    page = "\n".join(["Consolidated Balance Sheet", "as at 31st March, 2025",
+                      "1   Non-current assets", "2   Property, plant", "3   Capital work",
+                      "4   Goodwill", "5   Other intangibles", "6   Investments"])
+    assert detect_heading(page, page_no=185) == "financial_statements"
+    assert detect_heading(page, page_no=5) is None
+
+
 # --- boilerplate (nav bands) -------------------------------------------------------
 def test_nav_band_is_treated_as_boilerplate():
-    nav = "Management Discussion and Analysis"
+    nav = "Integrated Annual Report 2024-25"
     pages = [f"{nav}\npage {i} body text" for i in range(10)]
     bp = find_boilerplate(pages)
     assert nav in bp
     assert heading_candidates(pages[3], bp) == []
+
+
+def test_repeated_target_heading_is_not_boilerplate():
+    # ICICI's Board's Report PDF: 'BOARD'S REPORT' on every one of 49 pages.
+    pages = ["BOARD’S REPORT\nYour Directors have pleasure..."] + ["BOARD’S REPORT\nmore"] * 12
+    assert "BOARD’S REPORT" not in find_boilerplate(pages)
+    secs = split_into_sections(pages, "ICICI", "ICICIBANK", "FY25", part="boards")
+    assert secs[0].section_key == "directors_report" and secs[0].page_start == 1
+
+
+def test_segment_headings_close_the_risk_section():
+    assert detect_heading("IT & Technology Services Segment\nLTTS...") == "other"
+    assert detect_heading("Overall Financial Review 2024-25") == "other"
 
 
 # --- splitting + merging ------------------------------------------------------------

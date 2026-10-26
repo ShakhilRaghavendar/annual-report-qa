@@ -83,11 +83,34 @@ HEADINGS: list[tuple[str, int, str]] = [
     ("other", 50, r"^(secretarial\s+audit|dividend\s+distribution\s+policy|nomination\s+and\s+remuneration)"),
     ("other", 50, r"^(ten|10|five|5)[-\s]year\s+(financial\s+)?(highlights|summary)"),
     ("other", 50, r"^(form\s+aoc|form\s+mgt|form\s+mr)[-\s]?\d"),
+    # L&T's MD&A region is a run of chapters: "Overall Financial Review",
+    # "Infrastructure Projects Segment", "IT & Technology Services Segment"...
+    # None are sections we keep, but each must close the one before it.
+    ("other", 40, r"^(overall\s+)?financial\s+review\b"),
+    ("other", 40, r"^[a-z&,\s]{3,50}\s+segment$"),
+    ("other", 40, r"^(integrated\s+report|value\s+creation|our\s+capitals|(financial|human|intellectual|social|natural|manufactured)\s+capital)$"),
 ]
 
 _PATTERNS: list[tuple[str, int, re.Pattern[str]]] = [
     (key, prio, re.compile(pat, re.IGNORECASE)) for key, prio, pat in HEADINGS
 ]
+
+
+def _squash_pattern(pat: str) -> str:
+    """Derive a pattern that matches the same heading with ALL whitespace removed.
+    TCS's PDF font encoding scatters spaces inside words ('Man ag ement
+    Discussion an d Anal ysis'); matching a space-stripped copy of the line
+    against a space-stripped pattern sidesteps that entirely."""
+    return (
+        pat.replace(r"[-\s]?", "-?").replace(r"[-\s]", "-?")
+           .replace(r"\s+", "").replace(r"\s*", "").replace(r"\b", "")
+    )
+
+
+_SQUASHED_PATTERNS: list[tuple[str, int, re.Pattern[str]]] = [
+    (key, prio, re.compile(_squash_pattern(pat), re.IGNORECASE)) for key, prio, pat in HEADINGS
+]
+_WS = re.compile(r"\s+")
 
 # Headings sit at the top of a page. We look a little deeper than v0 (15 → 20
 # lines) because some designed pages carry a logo line, a page number and a
@@ -139,7 +162,25 @@ def extract_pages(pdf_path: Path) -> list[str]:
 
 # --- Heading detection -------------------------------------------------------------
 # Table-of-contents rows look like headings but aren't: "Chairman's Message ....... 08"
-_TOC_ROW = re.compile(r"(\.{3,}|\s\d{1,3})\s*$")
+_TOC_ROW = re.compile(r"\.{3,}\s*\d*\s*$")
+# Running headers often carry the page number: "79    Management Discussion and
+# Analysis" or "Management Discussion and Analysis     80" (TCS). Strip it before
+# matching rather than discarding the line.
+_EDGE_PAGE_NO = re.compile(r"^\d{1,3}\s+|\s+\d{1,3}$")
+
+
+def clean_heading_text(ln: str) -> str:
+    return _EDGE_PAGE_NO.sub("", ln).strip()
+# ...and some contents pages put the page number FIRST ("67  Board's Report", TCS).
+# A page where many top lines start with a small number is a contents page.
+_LEADING_PAGE_NO = re.compile(r"^\d{1,3}\s+\S")
+TOC_PAGE_MIN_ROWS = 5
+
+
+def is_contents_page(lines: list[str]) -> bool:
+    numbered = sum(1 for ln in lines if _LEADING_PAGE_NO.match(ln))
+    titled = any(re.match(r"^(contents?|what'?s inside|inside this report|index)\b", ln, re.I) for ln in lines[:4])
+    return numbered >= TOC_PAGE_MIN_ROWS or (titled and numbered >= 2)
 # A line that recurs at the top of this share of pages is a navigation band or
 # running label ("Integrated Annual Report 2024-25"), not a chapter heading.
 BOILERPLATE_SHARE = 0.25
@@ -154,7 +195,11 @@ def find_boilerplate(pages: list[str]) -> set[str]:
     """Lines that appear in the top region of >= BOILERPLATE_SHARE of pages.
     L&T and HUL print a nav strip ('Corporate Overview | Management Discussion
     and Analysis | ...') on every page; without this filter every page looks
-    like the start of the MD&A."""
+    like the start of the MD&A.
+
+    A line that IS a target heading is never boilerplate, however often it
+    repeats: ICICI's Board's Report PDF carries 'BOARD'S REPORT' on all 49
+    pages, and that running header is exactly what tells us what the file is."""
     if len(pages) < 8:
         return set()
     counts: dict[str, int] = {}
@@ -163,44 +208,80 @@ def find_boilerplate(pages: list[str]) -> set[str]:
             if len(ln) <= MAX_HEADING_LEN:
                 counts[ln] = counts.get(ln, 0) + 1
     threshold = max(4, int(len(pages) * BOILERPLATE_SHARE))
-    return {ln for ln, c in counts.items() if c >= threshold}
+    out = set()
+    for ln, c in counts.items():
+        if c < threshold:
+            continue
+        hit = _match_heading(ln)
+        if hit and hit[0] in TARGET_KEYS:
+            continue
+        out.add(ln)
+    return out
 
 
-def heading_candidates(page_text: str, boilerplate: set[str] = frozenset()) -> list[tuple[int, int, str]]:
+CONTENTS_PAGES_WITHIN = 15   # a contents page lives at the front of the report
+
+
+def heading_candidates(page_text: str, boilerplate: set[str] = frozenset(), page_no: int = 1) -> list[tuple[int, int, str]]:
     """
     All headings found in the top lines of a page, as (priority, -line_index, key),
     best first. Adjacent short lines are also tried joined ("Chairman's" +
     "Statement" at L&T), and TOC rows / boilerplate lines are skipped.
+    The contents-page check only applies to the front of the report: a balance
+    sheet also has many lines starting with a number (note numbers) — HUL's
+    consolidated statements were skipped as a 'contents page' before this.
     """
     lines = top_lines(page_text)
+    if page_no <= CONTENTS_PAGES_WITHIN and is_contents_page(lines):
+        return []
     texts: list[tuple[int, str]] = []
-    for idx, ln in enumerate(lines):
-        if ln in boilerplate or len(ln) > MAX_HEADING_LEN or _TOC_ROW.search(ln):
+    usable = [None if (ln in boilerplate or len(ln) > MAX_HEADING_LEN or _TOC_ROW.search(ln))
+              else clean_heading_text(ln) for ln in lines]
+    for idx, ln in enumerate(usable):
+        if not ln:
             continue
         texts.append((idx, ln))
-        if idx + 1 < len(lines):
-            nxt = lines[idx + 1]
-            if nxt not in boilerplate and len(ln) + len(nxt) <= MAX_HEADING_LEN:
-                texts.append((idx, f"{ln} {nxt}"))
+        # Titles set on two or three lines: "Chairman's / Statement" (L&T),
+        # "Management / Discussion and / Analysis" (TCS).
+        joined = ln
+        for extra in usable[idx + 1: idx + 3]:
+            if not extra:
+                break
+            joined = f"{joined} {extra}"
+            if len(joined) > MAX_HEADING_LEN:
+                break
+            texts.append((idx, joined))
 
     found: list[tuple[int, int, str]] = []
     for idx, text in texts:
-        for key, prio, pat in _PATTERNS:
-            if pat.search(text):
-                found.append((prio, -idx, key))
-                break
+        hit = _match_heading(text)
+        if hit:
+            found.append((hit[1], -idx, hit[0]))
     found.sort(reverse=True)
     return found
 
 
-def detect_heading(page_text: str, current_key: str | None = None, boilerplate: set[str] = frozenset()) -> str | None:
+def _match_heading(text: str) -> tuple[str, int] | None:
+    """(key, priority) for the first pattern that matches `text`, trying the
+    normal patterns first and then the whitespace-stripped ones."""
+    for key, prio, pat in _PATTERNS:
+        if pat.search(text):
+            return key, prio
+    squashed = _WS.sub("", text)
+    for key, prio, pat in _SQUASHED_PATTERNS:
+        if pat.search(squashed):
+            return key, prio
+    return None
+
+
+def detect_heading(page_text: str, current_key: str | None = None, boilerplate: set[str] = frozenset(), page_no: int = 1) -> str | None:
     """
     Return the section_key this page should open, or None to stay in the
     current section. The best heading that is NOT the current section wins —
     so a chapter's running header is ignored, but a sub-chapter heading below
     it (HDFC's MD&A inside the Directors' Report) is honoured.
     """
-    for _prio, _negidx, key in heading_candidates(page_text, boilerplate):
+    for _prio, _negidx, key in heading_candidates(page_text, boilerplate, page_no):
         if key != current_key:
             return key
     return None
@@ -227,7 +308,7 @@ def split_into_sections(pages: list[str], company: str, ticker: str, fy: str, pa
             )
 
     for i, page_text in enumerate(pages, start=1):
-        key = detect_heading(page_text, current_key, boilerplate)
+        key = detect_heading(page_text, current_key, boilerplate, page_no=i)
         if key and key != current_key:
             flush(end_page=i - 1)
             current_key, current_start, buffer = key, i, []
@@ -316,10 +397,16 @@ def peek(stem: str, page_numbers: list[int]) -> None:
         for i, ln in enumerate(top_lines(text)):
             flag = " [boilerplate]" if ln in bp else ""
             print(f"  {i:>2}: {ln[:100]}{flag}")
-        print(f"  candidates: {heading_candidates(text, bp)[:5]}")
+        print(f"  candidates: {heading_candidates(text, bp, page_no=n)[:5]}")
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows consoles default to cp1252, which cannot print ₹ or the "ﬁ"
+    # ligature that PDFs are full of. Print UTF-8 and never crash on a glyph.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
     argv = sys.argv[1:] if argv is None else argv
     if "--peek" in argv:
         i = argv.index("--peek")
