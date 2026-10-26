@@ -30,3 +30,5 @@ notebooks/.ipynb_checkpoints/
 # Setup/run helpers and their logs (local convenience only)
 *.bat
 *_log.txt
+index_store/
+data/chunks.jsonl

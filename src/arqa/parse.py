@@ -41,6 +41,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 RAW_DIR = ROOT / "data" / "raw"
 PROCESSED_DIR = ROOT / "data" / "processed"
+PAGE_SEP = "\f"   # page boundary inside a section's text
 
 # --- Headings ------------------------------------------------------------------
 # Each entry: (section_key, priority, regex). Higher priority wins when more than
@@ -315,7 +316,9 @@ def split_into_sections(pages: list[str], company: str, ticker: str, fy: str, pa
     buffer: list[str] = []
 
     def flush(end_page: int) -> None:
-        text = "\n".join(buffer).strip()
+        # Pages are joined with a form feed (\f) so downstream code (chunk.py)
+        # can recover page numbers: page_start + number of \f before a chunk.
+        text = PAGE_SEP.join(p.strip() for p in buffer).strip()
         if text:
             sections.append(
                 Section(
@@ -358,7 +361,7 @@ def merge_flapping(sections: list[Section], max_pages: int = 2) -> list[Section]
                     company=prev.company, ticker=prev.ticker, fy=prev.fy, part=prev.part,
                     section=prev.section, section_key=prev.section_key,
                     page_start=prev.page_start, page_end=nxt.page_end,
-                    text="\n".join([prev.text, cur.text, nxt.text]),
+                    text=PAGE_SEP.join([prev.text, cur.text, nxt.text]),
                 )
                 sections[i - 1:i + 2] = [merged]
                 changed = True

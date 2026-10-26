@@ -19,7 +19,7 @@ Indian annual reports are 200–400-page designed PDFs. The answer to "what did 
 | Week | Milestone | Status |
 | --- | --- | --- |
 | 1 | Fetch + parse 20 reports | Done: 24 PDFs fetched (ICICI ships its report as parts); parser v1.1 labels the target chapters in 22/24 files — see parsing notes |
-| 2 | Eval set, BM25 + vector indexes | |
+| 2 | Eval set, BM25 + vector indexes | in progress — chunker, indexes, retrievers and eval harness built; question set being written (see `data/eval/README.md`) |
 | 3 | Hybrid, rerank, cited answers | |
 | 4 | README with results, API, v1.0 | |
 
@@ -38,6 +38,9 @@ copy .env.example .env          # then add an API key
 ```bash
 python -m arqa.fetch            # download PDFs listed in data/sources.csv
 python -m arqa.parse            # PDFs -> data/processed/*.jsonl
+python -m arqa.chunk            # sections -> data/chunks.jsonl (page-ranged, ~500 tokens)
+python -m arqa.index            # BM25 + FAISS into index_store/
+python eval/run_eval.py         # score bm25 / dense / hybrid / hybrid+rerank -> eval/results.md
 pytest -q
 ```
 
