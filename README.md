@@ -18,7 +18,7 @@ Indian annual reports are 200–400-page designed PDFs. The answer to "what did 
 
 | Week | Milestone | Status |
 | --- | --- | --- |
-| 1 | Fetch + parse 20 reports | 24 PDFs fetched (ICICI ships its report as parts); parser v1 labels ~15/20 main reports correctly — see parsing notes |
+| 1 | Fetch + parse 20 reports | Done: 24 PDFs fetched (ICICI ships its report as parts); parser v1.1 labels the target chapters in 22/24 files — see parsing notes |
 | 2 | Eval set, BM25 + vector indexes | |
 | 3 | Hybrid, rerank, cited answers | |
 | 4 | README with results, API, v1.0 | |
@@ -54,7 +54,12 @@ The parser finds chapter headings in the top lines of each page (PyMuPDF, `sort=
 - **Two-line headings.** L&T sets "Chairman's / Statement" on two lines; adjacent short lines are also tried joined.
 - **Nested chapters.** At HDFC Bank the MD&A sits inside the Directors' Report; at HUL the chapter is literally "Report of Board of Directors and Management Discussion and Analysis". A sub-heading below a chapter's running header opens a sub-section; one-page flapping between the two is merged afterwards.
 - **Reliance** titles the letter "Chairman and Managing Director's Statement" and splits the MD&A into "Management Discussion and Analysis — Business Overview / Financial Performance / Risk and Governance".
-- **ICICI Bank** publishes the Integrated Report, Board's Report and financial statements as separate PDFs; `sources.csv` has a `part` column for that.
+- **ICICI Bank** publishes the Integrated Report, Board's Report and financial statements as separate PDFs; `sources.csv` has a `part` column for that. Its Board's Report PDF carries "BOARD'S REPORT" on all 49 pages — a repeated line that *is* a target heading is never treated as boilerplate.
+- **TCS**'s font encoding scatters spaces inside words ("Man ag ement Discussion an d Anal ysis"), sets titles over three lines, and puts page numbers beside running headers ("79  Management Discussion and Analysis"). Headings are matched against a whitespace-stripped copy as well; leading/trailing page numbers are stripped; two- and three-line joins are tried.
+- **HDFC Bank** letter-spaces its chapter titles ("D I R E C T O R S ' R E P O R T"); the whitespace-stripped match covers that too. Its MD&A is a section inside the Directors' Report.
+- **HUL** pads headings with ~70 zero-width spaces, which pushed them past the heading-length limit. Invisible characters are scrubbed before anything looks at a line.
+- **Contents pages** that put the page number first ("67  Board's Report") are detected by counting number-led lines — but only within the first 15 pages, because a balance sheet's note numbers look the same.
+- **L&T**'s MD&A is a run of segment reviews ("IT & Technology Services Segment", "Overall Financial Review"); those are closers so the Risk chapter ends where it should.
 - **chromadb** 0.5 has no Python 3.13 Windows wheel for its HNSW dependency (needs a C++ toolchain), so the vector index is FAISS.
 
-Open issues (as of parser v1): HDFC Bank FY25 Directors' Report falls into "Other"; TCS MD&A not detected; HUL consolidated financials not detected; ICICI Board's Report heading not recognised; L&T "Risk Management" still absorbs the Integrated Report chapters that follow it. `python -m arqa.parse --peek <STEM> <page> …` shows exactly what the parser sees on a page.
+Known gaps (parser v1.1): HDFC Bank FY24's Chairman's letter is not detected; Reliance FY25 and Sun Pharma have no standalone Risk chapter (risk discussion sits inside the MD&A, which is labelled correctly); ICICI's MD&A PDF is not yet in `sources.csv`. `python -m arqa.parse --peek <STEM> <page> …` shows exactly what the parser sees on a page — it is how every item above was found.

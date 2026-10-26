@@ -186,9 +186,28 @@ def is_contents_page(lines: list[str]) -> bool:
 BOILERPLATE_SHARE = 0.25
 
 
+# Invisible characters PDFs leave behind: zero-width spaces/joiners, soft hyphens,
+# BOMs, bidi marks. HUL pads 'Consolidated Balance Sheet' with ~70 of them, which
+# pushed the line past MAX_HEADING_LEN and hid the heading.
+_INVISIBLE = re.compile(r"[​-‏ - ⁠﻿­]")
+_MULTI_WS = re.compile(r"[ \t ]+")
+
+
+def normalise_line(ln: str) -> str:
+    ln = _INVISIBLE.sub("", ln)
+    return _MULTI_WS.sub(" ", ln).strip()
+
+
 def top_lines(page_text: str) -> list[str]:
-    """The first TOP_LINES non-empty, stripped lines of a page."""
-    return [ln.strip() for ln in page_text.splitlines() if ln.strip()][:TOP_LINES]
+    """The first TOP_LINES non-empty lines of a page, normalised."""
+    out = []
+    for raw in page_text.splitlines():
+        ln = normalise_line(raw)
+        if ln:
+            out.append(ln)
+            if len(out) == TOP_LINES:
+                break
+    return out
 
 
 def find_boilerplate(pages: list[str]) -> set[str]:

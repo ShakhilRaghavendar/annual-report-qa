@@ -66,6 +66,12 @@ def test_running_header_page_numbers_are_stripped():
     assert detect_heading("Board's Report     78\nWe further report") == "directors_report"
 
 
+def test_invisible_padding_is_scrubbed():
+    # HUL pads headings with zero-width spaces, pushing them past the length limit.
+    padded = "Consolidated Balance Sheet" + "​" * 70 + "\nas at 31st March, 2025"
+    assert detect_heading(padded, page_no=185) == "financial_statements"
+
+
 def test_three_line_title_and_letter_spacing():
     assert detect_heading("Management\nDiscussion and\nAnalysis\nOverview of the Industry") == "mdna"   # TCS
     assert detect_heading("D I R E C T O R S ’ R E P O R T\nDear Shareholders,") == "directors_report"  # HDFC
