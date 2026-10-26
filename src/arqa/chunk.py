@@ -37,7 +37,11 @@ CHUNKS_PATH = ROOT / "data" / "chunks.jsonl"
 CHUNK_TOKENS = 500
 OVERLAP_TOKENS = 80
 MIN_CHUNK_TOKENS = 40          # drop fragments that are just a page number
-INDEXED_KEYS = set(TARGET_KEYS)  # governance/BRSR/standalone chapters are not indexed in v1
+# The five target chapters plus the front matter: the "year at a glance" /
+# key-highlights pages are where a report states its headline numbers (Infosys
+# FY25 p15: free cash flow), and a user who asks for a headline number should
+# get that page. Governance / BRSR / standalone-accounts chapters stay out in v1.
+INDEXED_KEYS = set(TARGET_KEYS) | {"front_matter"}
 
 _enc = tiktoken.get_encoding("cl100k_base")
 

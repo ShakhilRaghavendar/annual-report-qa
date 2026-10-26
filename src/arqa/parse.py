@@ -79,6 +79,9 @@ HEADINGS: list[tuple[str, int, str]] = [
     ("other", 50, r"^brsr\b"),
     ("other", 50, r"^standalone\s+(financial\s+statements|balance\s+sheet|statement\s+of\s+profit)"),
     ("other", 50, rf"^(independent\s+)?auditor{APOS}?s?\s+report\s+on\s+(the\s+)?standalone"),
+    # A bare "Independent Auditor's Report" (Reliance) opens the standalone
+    # accounts; the consolidated variant above outranks it when present.
+    ("other", 50, rf"^independent\s+auditor{APOS}?s?\s+report$"),
     ("other", 50, r"^notice\s+(of|is\s+hereby|convening)\b"),
     ("other", 50, r"^notice$"),
     ("other", 50, r"^(secretarial\s+audit|dividend\s+distribution\s+policy|nomination\s+and\s+remuneration)"),
@@ -120,6 +123,13 @@ TOP_LINES = 20
 # A heading is a SHORT line; body text that happens to start with "risk
 # management" mid-sentence should not open a new section.
 MAX_HEADING_LEN = 90
+# ...and the matched title must be most of the line: at most this many words
+# may follow it ("Management Discussion and Analysis — Business Overview" is a
+# heading; "Risk Management and Corporate in any other listed company." is not).
+MAX_HEADING_TAIL_WORDS = 4
+# For the whitespace-stripped match (TCS kerning, HDFC letter-spacing) the
+# matched span must cover at least this share of the stripped line.
+MIN_SQUASHED_COVER = 0.5
 
 SECTION_LABELS = {
     "front_matter": "Front matter",
@@ -281,15 +291,33 @@ def heading_candidates(page_text: str, boilerplate: set[str] = frozenset(), page
     return found
 
 
+def _sentence_tail(tail: str) -> bool:
+    """True when the text after a heading match reads like running prose:
+    more than MAX_HEADING_TAIL_WORDS words and mostly lower-case. A nav strip
+    glued onto a title ("Consolidated Balance Sheet Overview Overview ... Statements",
+    HUL) or a title-case sub-title is NOT a sentence tail."""
+    words = tail.split()
+    if len(words) <= MAX_HEADING_TAIL_WORDS:
+        return False
+    lower = sum(1 for w in words if w[:1].islower())
+    return lower * 2 > len(words)
+
+
 def _match_heading(text: str) -> tuple[str, int] | None:
     """(key, priority) for the first pattern that matches `text`, trying the
     normal patterns first and then the whitespace-stripped ones."""
+    # A heading is (almost) the whole line. In a two-column layout body text
+    # can start with the same words — HDFC Bank FY25 p22, a director's bio:
+    # "Risk Management and Corporate in any other listed company." — so a
+    # match followed by a long tail is a sentence, not a heading.
     for key, prio, pat in _PATTERNS:
-        if pat.search(text):
+        m = pat.search(text)
+        if m and not _sentence_tail(text[m.end():]):
             return key, prio
     squashed = _WS.sub("", text)
     for key, prio, pat in _SQUASHED_PATTERNS:
-        if pat.search(squashed):
+        m = pat.search(squashed)
+        if m and (m.end() - m.start()) >= MIN_SQUASHED_COVER * len(squashed):
             return key, prio
     return None
 

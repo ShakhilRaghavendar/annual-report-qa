@@ -178,3 +178,34 @@ def test_merge_never_dissolves_a_target_section_into_other():
 def test_parse_stem_handles_parts():
     assert parse_stem("INFY_FY25") == ("INFY", "FY25", "")
     assert parse_stem("ICICIBANK_FY25_fs") == ("ICICIBANK", "FY25", "fs")
+
+
+# --- v1.3: a heading is (almost) the whole line -----------------------------
+
+def test_body_text_starting_with_heading_words_is_not_a_heading():
+    # HDFC Bank FY25 p22 — a director's bio in a two-column layout:
+    page = ("Who Governs Us\n"
+            "Strategy, Finance, M&A, Consulting, Independent Director Mr. Parekh\n"
+            "Risk Management and Corporate in any other listed company.\n"
+            "Planning culminating in the role of\n")
+    assert detect_heading(page, "chairman_letter") is None
+
+
+def test_heading_with_nav_strip_glued_on_still_matches():
+    # HUL FY25 p185 — the nav strip's second row lands on the title line:
+    page = ("Corporate Performance Governance Stakeholder Engagement Statutory Financial\n"
+            "Consolidated Balance Sheet Overview Overview Overview and Review Reports Statements\n"
+            "as at 31st March, 2025\n")
+    assert detect_heading(page, "other") == "financial_statements"
+
+
+def test_squashed_match_must_cover_most_of_the_line():
+    assert detect_heading("D I R E C T O R S ’ R E P O R T\nDear Shareholders,\n", "other") == "directors_report"
+    assert detect_heading("Risk Management and Corporate in any other listed company.\n", "other") is None
+
+
+def test_bare_independent_auditors_report_closes_the_section():
+    # Reliance: the standalone accounts open with a bare "Independent Auditor's Report".
+    assert detect_heading("Independent Auditor’s Report\nTo the Members of Reliance Industries Limited\n", "directors_report") == "other"
+    # ...but the consolidated variant is still the chapter we keep.
+    assert detect_heading("Independent Auditor’s Report on the Consolidated Financial Statements\n", "other") == "financial_statements"
