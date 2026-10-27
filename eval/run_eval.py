@@ -51,12 +51,15 @@ def hit(chunk: dict, gold: dict) -> bool:
         return False
     if chunk.get("part", "") != gold.get("part", ""):
         return False
-    pages = set(gold["pages"])
+    pages = set(gold["pages"]) | set(gold.get("alt_pages", []))
     return any(p in pages for p in range(chunk["page_start"], chunk["page_end"] + 1))
 
 
 def score_question(q: dict, hits: list) -> dict:
-    golds = q["gold"]
+    # entries marked alt are extra places the same fact appears (ICICI's split
+    # report); they count as hits but are not required for recall.
+    golds = [g for g in q["gold"] if not g.get("alt")]
+    alts = [g for g in q["gold"] if g.get("alt")]
     found = [False] * len(golds)
     first_rank = 0
     for h in hits:
@@ -65,6 +68,9 @@ def score_question(q: dict, hits: list) -> dict:
                 found[gi] = True
                 if first_rank == 0:
                     first_rank = h.rank
+        if first_rank == 0 and any(hit(h.chunk, g) for g in alts):
+            first_rank = h.rank
+            found[0] = True
     return {
         "hit_rate": 1.0 if any(found) else 0.0,
         "recall": sum(found) / len(golds),
