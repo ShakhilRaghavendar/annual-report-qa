@@ -1,6 +1,6 @@
 # Annual Report Q&A — hybrid RAG over Indian listed-company annual reports
 
-> Work in progress. Ask a question about a Nifty 50 company's annual report and get a cited answer, in ₹ crore, with the passages it came from. Built to compare retrieval strategies honestly, not to demo a chatbot.
+> v1.0. Ask a question about a Nifty 50 company's annual report and get a cited answer, in ₹ crore, with the passages it came from. Built to compare retrieval strategies honestly, not to demo a chatbot.
 
 ## Why
 
@@ -8,11 +8,13 @@ Indian annual reports are 200–400-page designed PDFs. The answer to "what did 
 
 ## What's in v1
 
-- 10 Nifty 50 companies × FY24 and FY25 = 20 reports
-- Section-aware parsing (Chairman's letter, MD&A, Directors' Report, Risk Management, consolidated financials)
-- Three retrievers behind one interface: BM25, dense vector, hybrid (RRF) + cross-encoder reranker
-- Cited answers with company / FY / section / page; figures normalised to ₹ crore
-- A 60-question evaluation set with gold passages and a script that scores every retriever
+- 10 Nifty 50 companies × FY24 and FY25 = 24 PDFs (ICICI Bank publishes its report in parts), 6,809 chunks
+- Section-aware parsing (Chairman's letter, MD&A, Directors' Report, Risk Management, consolidated financials) that survived ten different report layouts — the parsing notes below are the real content of week 1
+- Four retrievers behind one interface: BM25, dense vector (bge-small / FAISS), hybrid (reciprocal-rank fusion), hybrid + cross-encoder reranker
+- An answerer that reads the top passages with an open-weight model (`openai/gpt-oss-120b` on Groq's free tier), answers with `[n]` citations mapped to company / FY / section / page, and reports every figure in the unit the report used *and* in ₹ crore — the conversion is done in code, never by the model. If the passages don't contain the answer it says so
+- A CLI (`python -m arqa.ask`) and a FastAPI endpoint (`POST /ask`)
+- A 62-question evaluation set with page-level gold (every gold quote machine-verified against its page), a retrieval eval (hit rate / recall / MRR per retriever) and an answer eval (LLM judge + a hard citation check + a retrieval-vs-reading split for every miss)
+- Total cost to build and evaluate: ₹0 — Groq free tier, CPU-only embeddings, one laptop
 
 ## Status
 
@@ -20,8 +22,8 @@ Indian annual reports are 200–400-page designed PDFs. The answer to "what did 
 | --- | --- | --- |
 | 1 | Fetch + parse 20 reports | Done: 24 PDFs fetched (ICICI ships its report as parts); parser v1.1 labels the target chapters in 22/24 files — see parsing notes |
 | 2 | Eval set, BM25 + vector indexes | Done: 7,240 chunks over 24 reports; BM25 + FAISS (bge-small) indexes; 62-question eval set with page-level gold; first results below |
-| 3 | Hybrid, rerank, cited answers | in progress — answerer, CLI and answer eval built; first run 38/61 correct — see Answer results |
-| 4 | README with results, API, v1.0 | |
+| 3 | Hybrid, rerank, cited answers | Done: answerer, CLI, answer eval; two scored runs — see Answer results |
+| 4 | README with results, API, v1.0 | Done: `POST /ask`, before/after eval, v1.0 tag |
 
 ## Setup
 
@@ -44,7 +46,35 @@ python eval/run_eval.py         # score bm25 / dense / hybrid / hybrid+rerank ->
 python -m arqa.ask "What free cash flow did Infosys generate in FY25?" --ticker INFY --fy FY25
 python -m arqa.ask "How did Retail EBITDA move?" --ticker RELIANCE --fy FY24 --fy FY25
 python eval/run_answer_eval.py  # answer accuracy (LLM judge) + citation accuracy -> eval/answer_results.md
-pytest -q
+uvicorn arqa.api:app            # HTTP API; try it at http://127.0.0.1:8000/docs
+pytest -q                       # 44 tests, no network, no model downloads
+```
+
+## Try it
+
+```
+$ python -m arqa.ask "What EBITDA did Reliance Retail report in FY24 and FY25?" --ticker RELIANCE --fy FY24 --fy FY25
+
+Reliance Retail reported EBITDA of ₹23,082 crore in FY24 and ₹25,094 crore in FY25 [1][2].
+
+Figures:
+  • Reliance Retail EBITDA FY24: ₹ 23,082.00 crore
+  • Reliance Retail EBITDA FY25: ₹ 25,094.00 crore
+
+Sources:
+  [1] RELIANCE FY24, Management Discussion & Analysis, pp.9–10
+  [2] RELIANCE FY25, Management Discussion & Analysis, p.7
+```
+
+A unit trap, where the report only gives dollars:
+
+```
+$ python -m arqa.ask "What was Sun Pharma's global specialty revenue in FY25, in rupees crore?" --ticker SUNPHARMA --fy FY25
+
+Global Specialty revenue was US$ 1,216 million in FY25, up 17.1% [1]; the report states it in US$ only.
+
+Figures:
+  • global specialty revenue FY25: USD 1,216.0 million (stated in USD only; no ₹ figure on the cited page)
 ```
 
 ## Results
@@ -87,6 +117,34 @@ The second run, with these fixes, is the before/after table that replaces this o
 ### How the eval set was built
 
 `data/eval/questions.jsonl` has 62 questions over the 10 companies: 22 factual, 20 conceptual, 10 cross-year, 10 unit traps. Each carries the PDF page(s) the answer sits on and a short verbatim quote from that page; a check script confirms every quote is a substring of its page's extracted text, so the gold pages are real, not remembered. The questions were drafted with an LLM reading the extracted page text, then checked the same way — the guide for writing more by hand is `data/eval/README.md`. Scoring is page-overlap: a retrieved chunk counts when its page range touches a gold page.
+
+## Layout
+
+```
+src/arqa/
+  fetch.py      download the PDFs listed in data/sources.csv
+  parse.py      PDF -> labelled sections with page ranges (the hard part; see notes below)
+  chunk.py      sections -> ~500-token chunks that know their pages
+  units.py      lakh / crore / million / billion / US$ -> ₹ crore, Indian digit grouping
+  index.py      BM25 (rank_bm25) + dense (bge-small-en-v1.5, FAISS) over the same chunks
+  retrieve.py   one interface, four retrievers; metadata filters by company / year
+  llm.py        one door to the model (Groq or any OpenAI-compatible server), retries, retired-model mapping
+  answer.py     retrieve -> read -> JSON answer with citations -> code-side unit normalisation
+  ask.py        CLI          api.py   FastAPI
+eval/
+  run_eval.py          retrieval metrics per retriever        -> results.md
+  run_answer_eval.py   answer accuracy, citation, retrieval   -> answer_results.md (resumable)
+  compare_runs.py      before/after between two answer runs   -> compare.md
+data/eval/questions.jsonl   62 questions with gold pages and verified quotes
+tests/                      44 tests; parser quirks are pinned one test each
+```
+
+## What I'd do next
+
+- **Retrieval misses are the ceiling.** Where the gold page was retrieved, the model almost always reads it right; most wrong answers never saw the page. Next: query rewriting for metric-style questions ("order book" → "order inflow / order backlog"), and a table-aware chunker so a figure in a financial table carries its row and column headers.
+- **The ₹ glyph problem deserves a proper fix at parse time** — map the stray glyph to ₹ when it precedes a number followed by crore/lakh — rather than scrubbing in the answer.
+- **Judge calibration.** The LLM judge marks conceptual answers "partial" when they cover the main points but not every sub-point of a long gold answer. A rubric per question (which points are required) would make that number mean more.
+- **More companies.** The parser's closers and heading rules were learned from ten layouts; the next ten would teach it more.
 
 ## Parsing notes by company
 

@@ -97,7 +97,7 @@ def judge(q: dict, system_answer: str, found: bool) -> tuple[str, str]:
     sys_text = system_answer if found else f"NOT FOUND. {system_answer}"
     user = (f"QUESTION: {q['question']}\n\nGOLD ANSWER: {q['answer']}\n\nSYSTEM ANSWER: {sys_text}")
     raw = llm.chat([{"role": "system", "content": JUDGE_PROMPT}, {"role": "user", "content": user}],
-                   model=llm.model_name("judge"), json_mode=True, max_tokens=200)
+                   model=llm.model_name("judge"), json_mode=True, max_tokens=200, reasoning="low")
     try:
         s = raw[raw.find("{"): raw.rfind("}") + 1]
         d = json.loads(s)

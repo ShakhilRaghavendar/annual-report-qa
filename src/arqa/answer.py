@@ -47,6 +47,8 @@ Rules
 - Money: Indian reports state amounts in ₹ crore, ₹ lakh, ₹ million, ₹ billion, or US$ million/billion. Report every amount in the "figures" list with the unit EXACTLY as the passage states it. The currency symbol in the text is often garbled (a backtick, "H", "C", "I" or similar) — decide the currency from the words around the number ("crore", "lakh" => INR; "US$", "USD", "$" => USD), never from the symbol. Do not convert units yourself; the caller converts.
 - When the passages give BOTH a ₹ figure and a foreign-currency figure for the same item, answer with the ₹ figure and mention the other. Prefer a ₹ figure from any passage over a US$ figure, even if the US$ one is in a higher-ranked passage.
 - If the question asks for ₹ crore but the passages only give a US$ figure, that still counts as FOUND: answer with the US$ figure and say the report states it in US$ only. "found": false is only for when the item itself is not in the passages.
+- READ ACROSS LINES. The passages are extracted from two- and three-column PDF pages, so lines from neighbouring columns are interleaved: a sentence often continues one or two lines further down, after unrelated text. "Net Interest Income grew by 13.0 per cent" on one line and "to ` 1,22,670.1 crore" two lines later are the same sentence. Before saying a figure is absent, scan the whole passage for the number.
+- Abbreviations: "cr" = crore, "mn" = million, "bn" = billion, "lakh"/"lac" = lakh. "`34,549 cr" means ₹34,549 crore.
 - Write the rupee sign as ₹ in the answer. The passages may show it as a backtick, "C", "H", "I" or another stray letter in front of a number — never copy that letter.
 - Percentages and counts go in "figures" too, with unit "percent" or "count".
 
