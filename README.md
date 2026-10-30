@@ -167,3 +167,9 @@ The parser finds chapter headings in the top lines of each page (PyMuPDF, `sort=
 - **chromadb** 0.5 has no Python 3.13 Windows wheel for its HNSW dependency (needs a C++ toolchain), so the vector index is FAISS.
 
 Known gaps (parser v1.3): HDFC Bank FY24's Chairman's letter is not detected, and FY25's runs on through the board profiles (p10–60) because nothing closes it; L&T FY24 p355 ("Annexure to the Board Report — Management Discussion & Analysis: please refer to pages 18 to 127") is a one-line cross-reference that opens a false MD&A; Reliance FY25 and Sun Pharma have no standalone Risk chapter (risk discussion sits inside the MD&A, which is labelled correctly); ICICI's MD&A PDF is not yet in `sources.csv`. `python -m arqa.parse --peek <STEM> <page> …` shows exactly what the parser sees on a page — it is how every item above was found.
+
+## Licence and citation
+
+MIT — use it, fork it, build on it. If it helps your work, a mention is appreciated:
+
+> Shakhil Raghavendar, *Annual Report Q&A: hybrid RAG over Indian listed-company annual reports*, 2026. https://github.com/ShakhilRaghavendar/annual-report-qa
