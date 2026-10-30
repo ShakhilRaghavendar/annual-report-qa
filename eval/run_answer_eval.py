@@ -88,9 +88,25 @@ def citation_ok(ans: dict, gold: list[dict]) -> bool:
 
 
 def retrieval_ok(ans: dict, gold: list[dict]) -> bool:
-    """Was a gold page among the passages the model was GIVEN? Splits every
-    miss into a retrieval failure or a reading failure."""
+    """Was a gold page among the passages the model was GIVEN? Page-level —
+    generous, because a page is split across several chunks."""
     return any(_overlaps(c, gold) for c in ans["passages"])
+
+
+def _norm(s: str) -> str:
+    return " ".join(s.split()).lower()
+
+
+def quote_retrieved(ans: dict, gold: list[dict]) -> bool:
+    """Was the gold QUOTE itself inside a chunk the model was given? This is
+    the honest retrieval check: HDFC's NII sentence sits in chunk #13 of a
+    page the retriever served as chunk #14, which doesn't contain it."""
+    texts = [_norm(t) for t in ans.get("passage_texts", [])]
+    for g in gold:
+        q = _norm(g.get("quote", ""))
+        if q and any(q in t for t in texts):
+            return True
+    return False
 
 
 def judge(q: dict, system_answer: str, found: bool) -> tuple[str, str]:
@@ -114,8 +130,8 @@ def render(rows: list[dict], retriever: str, model: str) -> str:
         by_kind[r["kind"]].append(r)
         by_kind["all"].append(r)
     lines = [f"# Answer results ({len(rows)} questions, retriever = {retriever}, model = {model})", "",
-             "| kind | n | correct | partial | wrong | not found | citation ok | gold page retrieved | s/q |",
-             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+             "| kind | n | correct | partial | wrong | not found | citation ok | gold page retrieved | gold quote retrieved | s/q |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for kd in kinds:
         rs = by_kind.get(kd)
         if not rs:
@@ -126,9 +142,12 @@ def render(rows: list[dict], retriever: str, model: str) -> str:
         cit = sum(1 for r in rs if r["citation_ok"])
         lat = sum(r["latency_s"] for r in rs) / n
         ret = sum(1 for r in rs if r.get("retrieval_ok"))
-        lines.append(f"| {kd} | {n} | {c['correct']/n:.2f} | {c['partial']/n:.2f} | {c['wrong']/n:.2f} | {nf/n:.2f} | {cit/n:.2f} | {ret/n:.2f} | {lat:.1f} |")
+        qr = [r for r in rs if "quote_retrieved" in r]
+        qcol = f"{sum(1 for r in qr if r['quote_retrieved'])/len(qr):.2f}" if qr else "—"
+        lines.append(f"| {kd} | {n} | {c['correct']/n:.2f} | {c['partial']/n:.2f} | {c['wrong']/n:.2f} | {nf/n:.2f} | {cit/n:.2f} | {ret/n:.2f} | {qcol} | {lat:.1f} |")
     lines += ["", "correct/partial/wrong = LLM-judge verdict against the gold answer; citation ok = a cited passage overlaps a gold page (hard check); "
-              "gold page retrieved = a gold page was among the passages the model was given; not found = the system declined to answer.", ""]
+              "gold page retrieved = a gold page was among the passages the model was given (page-level, generous); "
+              "gold quote retrieved = the gold sentence itself was inside a passage the model was given (the honest retrieval check); not found = the system declined to answer.", ""]
     wrong = [r for r in rows if r["verdict"] == "wrong"]
     if wrong:
         r_fail = sum(1 for r in wrong if not r.get("retrieval_ok"))
@@ -168,6 +187,7 @@ def main() -> int:
         try:
             a = answer(q["question"], ticker=q["ticker"], fy=fy, k=args.k, retriever=args.retriever)
             ad = a.to_dict()
+            ad["passage_texts"] = [h.chunk["text"] for h in a.hits]
             verdict, reason = judge(q, a.answer, a.found)
         except Exception as e:  # noqa: BLE001 — keep going, record the failure
             print(f"  {q['id']}: ERROR {e}", flush=True)
@@ -181,12 +201,14 @@ def main() -> int:
                "citations": ad["citations"], "citation_ok": citation_ok(ad, q["gold"]),
                "passages": [f"{p['ticker']} {p['fy']}{' '+p['part'] if p['part'] else ''} p{p['page_start']}-{p['page_end']}" for p in ad["passages"]],
                "retrieval_ok": retrieval_ok(ad, q["gold"]),
+               "passage_ids": [p["chunk_id"] for p in ad["passages"]],
+               "quote_retrieved": quote_retrieved(ad, q["gold"]),
                "verdict": verdict, "reason": reason, "latency_s": round(ad["latency_s"], 2),
                "model": ad["model"], "retriever": ad["retriever"]}
         done[q["id"]] = row
         with out.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        print(f"  [{i}/{len(todo)}] {q['id']}: {verdict:8s} cite={'ok' if row['citation_ok'] else 'NO'} retrieved={'ok' if row['retrieval_ok'] else 'NO'}  {ad['latency_s']:.1f}s", flush=True)
+        print(f"  [{i}/{len(todo)}] {q['id']}: {verdict:8s} cite={'ok' if row['citation_ok'] else 'NO'} retrieved={'ok' if row['retrieval_ok'] else 'NO'} quote={'ok' if row['quote_retrieved'] else 'NO'}  {ad['latency_s']:.1f}s", flush=True)
         time.sleep(args.pause)
 
     rows = [done[q["id"]] for q in questions if q["id"] in done]

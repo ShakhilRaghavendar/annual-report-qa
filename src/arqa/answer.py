@@ -32,7 +32,7 @@ from dataclasses import dataclass, field, asdict
 
 from arqa import llm
 from arqa.retrieve import Hit, get_retriever
-from arqa.units import TO_CRORE, format_crore, to_crore
+from arqa.units import TO_CRORE, find_amounts, format_crore, to_crore
 
 DEFAULT_RETRIEVER = "hybrid+rerank"
 DEFAULT_K = 5
@@ -114,10 +114,12 @@ class Answer:
     retriever: str
     latency_s: float
     raw: str = field(default="", repr=False)
+    hits: list = field(default_factory=list, repr=False)   # the Hit objects, for evals
 
     def to_dict(self) -> dict:
         d = asdict(self)
         d.pop("raw", None)
+        d.pop("hits", None)
         return d
 
     def render(self) -> str:
@@ -226,6 +228,13 @@ def parse_reply(raw: str, n_passages: int) -> tuple[bool, str, list[Figure], lis
     if not cited:
         cited = [f.citation for f in figures if f.citation and f.citation not in cited]
         cited = list(dict.fromkeys(cited))
+    # The model sometimes writes the figure in the prose ("₹ 472.27 billion")
+    # and leaves the figures list empty. Parse the prose with the unit engine.
+    if not figures:
+        for a in find_amounts(text):
+            if a.unit:   # a bare number is not an amount
+                figures.append(Figure(label="amount in answer", value=a.value, unit=_norm_unit(a.unit),
+                                      currency=a.currency or "INR", citation=None, crore=a.crore))
     # The model sometimes answers with the figure and still says found=false
     # when the unit differs from the one asked for. A figure IS a finding.
     if figures and not found:
@@ -261,4 +270,4 @@ def answer(question: str, ticker: str | None = None, fy: str | list[str] | None 
 
     passages = [cite(n, h) for n, h in enumerate(hits, start=1)]
     citations = [passages[n - 1] for n in cited]
-    return Answer(question, found, text, figures, citations, passages, model, retriever, time.time() - t0, raw)
+    return Answer(question, found, text, figures, citations, passages, model, retriever, time.time() - t0, raw, hits)

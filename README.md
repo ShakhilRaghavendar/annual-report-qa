@@ -18,7 +18,7 @@ Indian annual reports are 200–400-page designed PDFs. The answer to "what did 
 
 ## Status
 
-| Week | Milestone | Status |
+| Stage | Milestone | Status |
 | --- | --- | --- |
 | 1 | Fetch + parse 20 reports | Done: 24 PDFs fetched (ICICI ships its report as parts); parser v1.1 labels the target chapters in 22/24 files — see parsing notes |
 | 2 | Eval set, BM25 + vector indexes | Done: 7,240 chunks over 24 reports; BM25 + FAISS (bge-small) indexes; 62-question eval set with page-level gold; first results below |
@@ -96,23 +96,23 @@ What the table says (62 questions is small; treat differences under ~5 points as
 - **The reranker is worth it at the top of the list**: +5 points hit rate, MRR 0.67 → 0.73 (the right page moves from rank ~2 to rank ~1.4), for 20× the latency (3 s/question on a laptop CPU). For a cited-answer system the LLM reads the top 3–5 chunks, so rank matters more than recall@50.
 - **Cross-year questions are the hardest kind** (0.60 R@5 at best): they need two pages from two reports in one top-5, which is a retrieval-budget problem, not a relevance one — the week-3 answerer will issue one retrieval per year.
 
-### Answer results (first run, 61 of 62 questions — Groq free-tier cap stopped the last one)
+### Answer results
 
-Retriever hybrid + rerank, k = 5, answerer `openai/gpt-oss-120b`, judge `openai/gpt-oss-20b`, both on Groq's free tier.
+Answerer `openai/gpt-oss-120b`, judge `openai/gpt-oss-20b`, both on Groq's free tier; retriever hybrid + rerank, k = 5. Two scored runs: run 1 as first built; run 2 after reading every miss and fixing what was code (a unit-mismatch "not found" rule, citation-marker parsing, verified alternate gold pages). Run 2 covers the 45 questions Groq's 200k-tokens/day cap allowed; the table compares the two runs on those 45.
 
-| | correct | partial | wrong | cited a gold page |
-| --- | --- | --- | --- | --- |
-| all 61 | **38 (62%)** | 9 | 14 | 37 |
+| | correct (judge) | partial | wrong | cited a gold page (hard check) | gold page retrieved |
+| --- | --- | --- | --- | --- | --- |
+| run 1 (62 q) | 63% | 15% | 23% | 61% | — |
+| run 1, same 45 | 69% | 13% | 18% | 64% | — |
+| **run 2 (45 q)** | 62% | 20% | 18% | **84%** | **98%** |
 
-What the 23 non-correct answers were, after reading every one:
+Three things this table says, in order of how much I trust them:
 
-- **Unit-trap questions answered "not found" (3).** The model extracted the US$ figure, put it in the figures list, and still declared the answer not found because the question asked for ₹ crore. Fixed in code: an extracted figure *is* a finding.
-- **Right answer, no citation (6).** The `[n]` marker was missing or written as `【2】`. Fixed: accept both bracket styles and fall back to the citation each figure carries.
-- **Right answer, "wrong" page (4).** The same fact appears on several pages — TCS's deal TCV is in the highlights *and* the Chairman's letter — and the gold set listed one. Fixed: the question file now carries verified alternate pages for those.
-- **Gold page not retrieved, or retrieved and misread (~8).** HDFC's net interest income, L&T's order book, HUL's Home Care FY25 revenue, Bajaj's unclaimed deposits. The eval now records the retrieved passages and a *gold page retrieved* flag, so the second run splits these into retrieval failures and reading failures — the fix is different for each.
-- **Conceptual "partial" (7).** The judge wants every sub-point of a long gold answer; the system gives the main three. Accepted for now.
+1. **The hard metric moved: citations on a gold page 64% → 84%.** Those were code bugs — missing `[n]` markers, `【2】` brackets, "not found" declared with the figure sitting in the output — and fixing code moves hard metrics.
+2. **The soft metric wobbled: judge-correct 69% → 62% on identical questions, with "wrong" unchanged.** Six verdicts flipped on answers that barely changed (TCS's margin question went correct → wrong for "omitting figures" it had omitted the first time too). At n = 45 an LLM judge is noisy by several points; a before/after on a judge alone would have read as a regression. This is why the eval has a hard check next to the judge.
+3. **Retrieval is no longer the bottleneck for this set: 98% of questions had a gold page in the top 5, and 7 of 8 wrong answers are reading failures.** The model was shown the page and still missed — almost always because the PDF's two-column layout interleaves lines, so "Net Interest Income grew by 13.0 per cent" and "to ` 1,22,670.1 crore" sit two lines apart with another column's text between them. Prompt v2 tells the model exactly that and gives it a larger reasoning budget; run 3 (pending the daily cap) measures it.
 
-The second run, with these fixes, is the before/after table that replaces this one.
+Per-question verdicts and reasons: `eval/answer_results.md`; run-to-run diff: `eval/compare.md`; raw records with retrieved passages: `eval/answers*.jsonl`.
 
 ### How the eval set was built
 

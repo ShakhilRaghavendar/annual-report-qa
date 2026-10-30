@@ -102,3 +102,10 @@ def test_citations_fall_back_to_figures_and_accept_cjk_brackets():
     raw = json.dumps({"found": True, "answer": "No markers here.",
                       "figures": [{"label": "x", "value": 1, "unit": "crore", "currency": "INR", "citation": 3}]})
     assert A.parse_reply(raw, 3)[3] == [3]
+
+
+def test_amount_in_prose_is_parsed_when_figures_list_is_empty():
+    raw = json.dumps({"found": False, "answer": "The report gives standalone PAT as ₹ 472.27 billion, not in crore. [1]", "figures": []})
+    found, text, figs, cited = A.parse_reply(raw, 2)
+    assert found and cited == [1]
+    assert figs[0].unit == "billion" and figs[0].crore == pytest.approx(47227.0)
