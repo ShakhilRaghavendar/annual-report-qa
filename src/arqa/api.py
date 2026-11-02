@@ -37,7 +37,7 @@ class AskRequest(BaseModel):
     ticker: str | None = Field(None, examples=["RELIANCE"])
     fy: list[str] = Field(default_factory=list, examples=[["FY24", "FY25"]])
     k: int = Field(DEFAULT_K, ge=1, le=12)
-    retriever: str = Field(DEFAULT_RETRIEVER, pattern=r"^(bm25|dense|hybrid|hybrid\+rerank)$")
+    retriever: str = Field(DEFAULT_RETRIEVER, pattern=r"^(bm25|dense|hybrid|hybrid\+rerank)(\+expand\d*)?$")
 
 
 @app.get("/health")

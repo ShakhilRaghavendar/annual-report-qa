@@ -12,6 +12,7 @@ Indian annual reports are 200–400-page designed PDFs. The answer to "what did 
 - Section-aware parsing (Chairman's letter, MD&A, Directors' Report, Risk Management, consolidated financials) that survived ten different report layouts — the parsing notes below are the real content of week 1
 - Four retrievers behind one interface: BM25, dense vector (bge-small / FAISS), hybrid (reciprocal-rank fusion), hybrid + cross-encoder reranker
 - An answerer that reads the top passages with an open-weight model (`openai/gpt-oss-120b` on Groq's free tier), answers with `[n]` citations mapped to company / FY / section / page, and reports every figure in the unit the report used *and* in ₹ crore — the conversion is done in code, never by the model. If the passages don't contain the answer it says so
+- Context expansion: each retrieved chunk is handed to the model with its neighbours, chosen on a measured accuracy-per-token curve
 - A CLI (`python -m arqa.ask`) and a FastAPI endpoint (`POST /ask`)
 - A 62-question evaluation set with page-level gold (every gold quote machine-verified against its page), a retrieval eval (hit rate / recall / MRR per retriever) and an answer eval (LLM judge + a hard citation check + a retrieval-vs-reading split for every miss)
 - Total cost to build and evaluate: ₹0 — Groq free tier, CPU-only embeddings, one laptop
@@ -24,6 +25,7 @@ Indian annual reports are 200–400-page designed PDFs. The answer to "what did 
 | 2 | Eval set, BM25 + vector indexes | Done: 7,240 chunks over 24 reports; BM25 + FAISS (bge-small) indexes; 62-question eval set with page-level gold; first results below |
 | 3 | Hybrid, rerank, cited answers | Done: answerer, CLI, answer eval; two scored runs — see Answer results |
 | 4 | README with results, API, v1.0 | Done: `POST /ask`, before/after eval, v1.0 tag |
+| 5 | Context expansion | Done: nine configurations scored without an LLM; expand k=4 chosen on the curve; answers 58% → 74% correct |
 
 ## Setup
 
@@ -112,7 +114,48 @@ Three things this table says, in order of how much I trust them:
 2. **The soft metric wobbled: judge-correct 69% → 62% on identical questions, with "wrong" unchanged.** Six verdicts flipped on answers that barely changed (TCS's margin question went correct → wrong for "omitting figures" it had omitted the first time too). At n = 45 an LLM judge is noisy by several points; a before/after on a judge alone would have read as a regression. This is why the eval has a hard check next to the judge.
 3. **Retrieval is no longer the bottleneck for this set: 98% of questions had a gold page in the top 5, and 7 of 8 wrong answers are reading failures.** The model was shown the page and still missed — almost always because the PDF's two-column layout interleaves lines, so "Net Interest Income grew by 13.0 per cent" and "to ` 1,22,670.1 crore" sit two lines apart with another column's text between them. Prompt v2 tells the model exactly that and gives it a larger reasoning budget; run 3 (pending the daily cap) measures it.
 
-Per-question verdicts and reasons: `eval/answer_results.md`; run-to-run diff: `eval/compare.md`; raw records with retrieved passages: `eval/answers*.jsonl`.
+**Run 3 — a prompt change that did nothing, and the metric that explains why.** Run 2 said 7 of 8 wrong answers were "reading failures": the gold page was retrieved and the model still missed. So run 3 changed the prompt (read across interleaved columns, "cr" means crore) and gave the model a larger reasoning budget, and re-scored all 62. Result: correct 62% → 58%, wrong 18% → 18%, citations 84% → 84% on the same 45 questions — noise. Looking at the actual chunks explained it:
+
+| question | gold sentence is in | model was given |
+| --- | --- | --- |
+| HDFC Bank FY25 net interest income | chunk #13 (pp. 209–210) | chunk #14 (p. 210) — doesn't contain it |
+| Infosys FY25 free cash flow (₹34,549 cr) | chunk #18 (pp. 14–15) | chunk #19 (p. 15) — doesn't contain it |
+| Infosys FY25 client count | chunk #24, as "…made / at 1,869. The client…" | chunk #24 — a real reading failure |
+
+Two of the three "reading failures" were retrieval failures at chunk granularity: a page is split across several chunks and the page-level check counted any of them. The eval now also records **gold quote retrieved** — whether the gold sentence itself was inside a passage the model saw (83% on the questions scored since the flag was added, against 95% page-level). That 12-point gap is the real ceiling, and prompting can't move it. The fix is retrieval-side — serving the neighbouring chunks of each hit, or sentence-aware chunking with more overlap — and it is the next measured change.
+
+**Run 4 — context expansion, chosen on a curve before spending a token.** The fix for chunk-boundary misses is retrieval-side: hand the model each hit's neighbouring chunks (same report, same section, overlap removed, touching windows merged). Because "was the gold sentence in what we'd hand the model?" needs no LLM, nine configurations were scored on all 62 questions in minutes on a laptop (`eval/run_quote_eval.py`):
+
+![Gold-sentence retrieval vs tokens per question for nine retriever configurations](docs/retrieval_curve.png)
+
+| configuration | gold quote retrieved | tokens / question |
+| --- | --- | --- |
+| plain, k=5 (runs 1–3) | 0.89 | 2,652 |
+| plain, k=7 | 0.92 | 3,722 |
+| plain, k=8 | 0.92 | 4,240 |
+| expand top-3 of 5 | 0.92 | 4,912 |
+| **expand, k=4** | **0.94** | **5,149** |
+| expand, k=5 | 0.94 | 6,451 |
+
+Two things the curve says: widening only the top few hits is *worse* than simply retrieving more (Infosys's free-cash-flow chunk sits at rank 4, so "expand the top 3" skips exactly the hit that needed it — the reranker's confidence is not a guide to which hit needs context); and expand k=4 is the knee — the best accuracy on the curve, 20% cheaper than expand k=5 for the same 0.94. Four questions are missed by every configuration (Bajaj's unclaimed deposits, Sun Pharma's FDA facilities, HUL Home Care FY25, TCS's deal TCV): the right chunk isn't in the top 5 at all, which is a query problem, not a context one.
+
+Then one answer run with the chosen configuration, all 62 questions, same model and judge:
+
+| | run 3: plain k=5 | **run 4: expand k=4** |
+| --- | --- | --- |
+| correct (judge) | 58% | **74%** |
+| partial | 23% | 11% |
+| wrong | 19% | **15%** |
+| cited a gold page (hard check) | 82% | 85% |
+| gold quote retrieved | 83%† | **94%** |
+| factual correct | 82% | **91%** |
+| conceptual correct | 30% | **60%** |
+
+†run 3 measured on the 18 questions scored after the flag was added; run 4 on all 62.
+
+13 verdicts improved, 4 worsened — the first run-to-run change clearly outside the judge's noise (earlier runs: 3 vs 5, 4 vs 6). The two named chunk-boundary cases, HDFC Bank's net interest income and Infosys's free cash flow, went wrong → correct exactly as the quote metric predicted. Most of the gain is *partial → correct*: with the surrounding chunks the model gives the whole answer rather than the half it could see. One cost to note: Groq's free tier caps a single request at 8,000 tokens, which a cross-year question with eight widened passages exceeded; `answer.fit_budget` now shrinks the lowest-ranked expanded hits back to their centre chunk until the request fits. `hybrid+rerank+expand`, k=4, is now the default.
+
+Full run-3 table: `eval/answer_results_run3.md` (62 questions, correct 58% / partial 23% / wrong 19%, cited gold page 82%). Per-question verdicts and reasons there and in `eval/answer_results.md` (run 4); run-to-run diffs in `eval/compare.md`, `eval/compare_run2_vs_run3.md` and `eval/compare_run3_vs_run4.md`; raw records with retrieved passages and chunk ids in `eval/answers*.jsonl`.
 
 ### How the eval set was built
 
@@ -141,7 +184,8 @@ tests/                      44 tests; parser quirks are pinned one test each
 
 ## What I'd do next
 
-- **Retrieval misses are the ceiling.** Where the gold page was retrieved, the model almost always reads it right; most wrong answers never saw the page. Next: query rewriting for metric-style questions ("order book" → "order inflow / order backlog"), and a table-aware chunker so a figure in a financial table carries its row and column headers.
+- **The four questions no configuration retrieves.** With context expansion in, the remaining retrieval misses are queries whose wording is far from the report's ("unclaimed deposits" vs "matured but not claimed"). Next: query rewriting / multi-query retrieval, measured on the gold-quote-retrieved metric first, as this round was.
+- **Sentence-aware chunking** with more overlap would attack the same boundary problem from the other side and might get the 0.94 at a lower token cost than expansion.
 - **The ₹ glyph problem deserves a proper fix at parse time** — map the stray glyph to ₹ when it precedes a number followed by crore/lakh — rather than scrubbing in the answer.
 - **Judge calibration.** The LLM judge marks conceptual answers "partial" when they cover the main points but not every sub-point of a long gold answer. A rubric per question (which points are required) would make that number mean more.
 - **More companies.** The parser's closers and heading rules were learned from ten layouts; the next ten would teach it more.

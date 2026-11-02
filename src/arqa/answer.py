@@ -34,9 +34,15 @@ from arqa import llm
 from arqa.retrieve import Hit, get_retriever
 from arqa.units import TO_CRORE, find_amounts, format_crore, to_crore
 
-DEFAULT_RETRIEVER = "hybrid+rerank"
-DEFAULT_K = 5
+# Chosen on the gold-quote-retrieved curve (eval/quote_results*.md): expand k=4 is
+# the best sentence-level retrieval per token (0.94 at ~5.1k tokens/question).
+DEFAULT_RETRIEVER = "hybrid+rerank+expand"
+DEFAULT_K = 4
 MAX_PASSAGE_CHARS = 2200   # ~500 tokens; chunks are ≤520 tokens anyway
+# Groq's free tier rejects any single request over 8,000 tokens. Prompt + question
+# + the model's reply need ~1,500, so the passages get this much. Cross-year
+# questions with expansion (4 wide hits per year) blew past it.
+PASSAGE_TOKEN_BUDGET = 6000
 
 SYSTEM_PROMPT = """You are an analyst answering questions about Indian listed companies strictly from excerpts of their annual reports.
 
@@ -152,12 +158,34 @@ def retrieve(question: str, ticker: str | None, fy: str | list[str] | None,
     return hits
 
 
+def fit_budget(hits: list[Hit], budget: int = PASSAGE_TOKEN_BUDGET) -> list[Hit]:
+    """Keep the passages under `budget` tokens. Expanded hits are shrunk back to
+    their centre chunk from the LOWEST rank upwards until it fits; if single
+    chunks still don't fit, the lowest-ranked are dropped. Ranks are preserved."""
+    def tokens(h: Hit) -> int:
+        return h.chunk.get("n_tokens") or len(h.chunk["text"]) // 4
+    hits = list(hits)
+    for i in range(len(hits) - 1, -1, -1):
+        if sum(tokens(h) for h in hits) <= budget:
+            break
+        c = hits[i].chunk
+        if "centre_text" in c and c["text"] != c["centre_text"]:
+            hits[i] = Hit(chunk={**c, "text": c["centre_text"], "n_tokens": c.get("centre_tokens", 0),
+                                 "page_start": c["page_start"], "page_end": c["page_end"],
+                                 "expanded_from": [c["chunk_id"]], "shrunk": True},
+                          score=hits[i].score, rank=hits[i].rank)
+    while hits and sum(tokens(h) for h in hits) > budget and len(hits) > 1:
+        hits.pop()
+    return hits
+
+
 def _passage_block(hits: list[Hit]) -> str:
     parts = []
     for n, h in enumerate(hits, start=1):
         c = h.chunk
         pages = f"p.{c['page_start']}" if c["page_start"] == c["page_end"] else f"pp.{c['page_start']}-{c['page_end']}"
-        text = c["text"][:MAX_PASSAGE_CHARS]
+        limit = MAX_PASSAGE_CHARS * len(c.get("expanded_from", [None]))
+        text = c["text"][:limit]
         parts.append(f"[{n}] {c['ticker']} {c['fy']} — {c['section']}, {pages}\n{text}")
     return "\n\n".join(parts)
 
@@ -248,7 +276,7 @@ def parse_reply(raw: str, n_passages: int) -> tuple[bool, str, list[Figure], lis
 def answer(question: str, ticker: str | None = None, fy: str | list[str] | None = None,
            k: int = DEFAULT_K, retriever: str = DEFAULT_RETRIEVER, model: str | None = None) -> Answer:
     t0 = time.time()
-    hits = retrieve(question, ticker, fy, k=k, retriever=retriever)
+    hits = fit_budget(retrieve(question, ticker, fy, k=k, retriever=retriever))
     model = model or llm.model_name("model")
     if not hits:
         return Answer(question, False, "No passages matched the filters.", [], [], [], model, retriever, time.time() - t0)

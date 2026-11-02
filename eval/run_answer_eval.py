@@ -191,10 +191,11 @@ def main() -> int:
             verdict, reason = judge(q, a.answer, a.found)
         except Exception as e:  # noqa: BLE001 — keep going, record the failure
             print(f"  {q['id']}: ERROR {e}", flush=True)
-            if "rate" in str(e).lower() or "429" in str(e):
-                print("Rate/daily limit hit — stop here and re-run later; progress is saved.", flush=True)
+            msg = str(e).lower()
+            if "per day" in msg or "tpd" in msg or "asks for" in msg:
+                print("Daily cap hit — stop here and re-run later; progress is saved.", flush=True)
                 break
-            continue
+            continue   # a 413 / parse error / timeout on one question should not end the run
         row = {"id": q["id"], "kind": q["kind"], "ticker": q["ticker"], "fy": q["fy"],
                "question": q["question"], "gold_answer": q["answer"],
                "found": ad["found"], "answer": ad["answer"], "figures": ad["figures"],

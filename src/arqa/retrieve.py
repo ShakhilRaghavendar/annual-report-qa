@@ -7,6 +7,7 @@ retrieve.py — one interface, four retrievers.
   DenseRetriever   embedding similarity (FAISS)
   HybridRetriever  BM25 + dense, fused with Reciprocal Rank Fusion
   Reranked         any retriever, re-ordered by a cross-encoder
+  Expanded         any retriever, each hit widened to its neighbouring chunks
 
 Reciprocal Rank Fusion: each list contributes 1/(k0 + rank) per document and
 the sums are sorted. It needs no score calibration between BM25 (unbounded)
@@ -168,15 +169,92 @@ class Reranked:
                 for r, i in enumerate(order, start=1)]
 
 
+# --- context expansion ---------------------------------------------------------------
+def _overlap_join(a: str, b: str, max_probe: int = 800) -> str:
+    """Join two consecutive chunks, dropping the text the chunker repeated
+    (chunks overlap by ~80 tokens): the longest suffix of `a` that is a prefix of `b`."""
+    probe = min(len(a), len(b), max_probe)
+    for n in range(probe, 40, -1):
+        if a.endswith(b[:n]):
+            return a + b[n:]
+    return a + "\n" + b
+
+
+def _same_section(x: dict, y: dict) -> bool:
+    return (x["ticker"], x["fy"], x.get("part", ""), x["section_key"]) == \
+           (y["ticker"], y["fy"], y.get("part", ""), y["section_key"])
+
+
+def expand_hits(hits: list[Hit], before: int = 1, after: int = 1, top: int | None = None) -> list[Hit]:
+    """Widen each hit to [row-before, row+after] within its section. Windows of
+    different hits that touch are merged into the higher-ranked one, so the
+    model never sees the same text twice. Why: run 3 showed the gold sentence
+    sitting in chunk #13 while the retriever served chunk #14 of the same page.
+
+    The merged chunk keeps the centre hit's chunk_id and gains
+    `expanded_from` (the chunk ids it now spans) and a page range covering all.
+    `top`: widen only the first `top` hits (by rank); the rest stay single
+    chunks — the budget goes where the reranker is most confident."""
+    meta = _meta()
+    windows: list[tuple[Hit, set[int]]] = []
+    for i, h in enumerate(hits):
+        c = h.chunk
+        row = c["row"]
+        rows = {row}
+        widen = top is None or i < top
+        for d in range(1, (before if widen else 0) + 1):
+            if row - d >= 0 and _same_section(meta[row - d], c):
+                rows.add(row - d)
+        for d in range(1, (after if widen else 0) + 1):
+            if row + d < len(meta) and _same_section(meta[row + d], c):
+                rows.add(row + d)
+        for _, w in windows:
+            if w & rows:
+                w |= rows
+                break
+        else:
+            windows.append((h, rows))
+    out = []
+    for rank, (h, rows) in enumerate(windows, start=1):
+        parts = [meta[r] for r in sorted(rows)]
+        text = parts[0]["text"]
+        for p in parts[1:]:
+            text = _overlap_join(text, p["text"])
+        merged = {**h.chunk, "text": text, "centre_text": h.chunk["text"], "centre_tokens": h.chunk.get("n_tokens", 0),
+                  "page_start": min(p["page_start"] for p in parts),
+                  "page_end": max(p["page_end"] for p in parts),
+                  "n_tokens": sum(p.get("n_tokens", 0) for p in parts),
+                  "expanded_from": [p["chunk_id"] for p in parts]}
+        out.append(Hit(chunk=merged, score=h.score, rank=rank))
+    return out
+
+
+class Expanded:
+    """Wrap any retriever: run it, then widen each hit to its neighbours."""
+
+    def __init__(self, base, before: int = 1, after: int = 1, top: int | None = None) -> None:
+        self.base = base
+        self.before, self.after, self.top = before, after, top
+        self.name = f"{base.name}+expand" + (f"{top}" if top else "")
+
+    def search(self, query: str, k: int = 5, filters: dict | None = None) -> list[Hit]:
+        return expand_hits(self.base.search(query, k=k, filters=filters), self.before, self.after, self.top)
+
+
 # --- factory -------------------------------------------------------------------------
 _CACHE: dict[str, object] = {}
 
 
 def get_retriever(name: str):
-    """'bm25' | 'dense' | 'hybrid' | 'hybrid+rerank' — instances are cached (models load once)."""
+    """'bm25' | 'dense' | 'hybrid' | 'hybrid+rerank', each optionally with '+expand'
+    (every hit widened to its neighbouring chunks) or '+expandN' (only the top N hits).
+    Instances are cached (models load once)."""
     if name in _CACHE:
         return _CACHE[name]
-    if name == "bm25":
+    if "+expand" in name:
+        base, _, n = name.rpartition("+expand")     # "+expand" widens all hits; "+expand3" the top 3
+        r = Expanded(get_retriever(base), top=int(n) if n else None)
+    elif name == "bm25":
         r = BM25Retriever()
     elif name == "dense":
         r = DenseRetriever()

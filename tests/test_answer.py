@@ -109,3 +109,16 @@ def test_amount_in_prose_is_parsed_when_figures_list_is_empty():
     found, text, figs, cited = A.parse_reply(raw, 2)
     assert found and cited == [1]
     assert figs[0].unit == "billion" and figs[0].crore == pytest.approx(47227.0)
+
+
+def test_fit_budget_shrinks_lowest_ranked_expanded_hits_first():
+    def wide(rank, n=1200):
+        return Hit(chunk={"chunk_id": f"c{rank}", "ticker": "T", "fy": "FY25", "part": "", "section": "s", "section_key": "s",
+                          "page_start": 1, "page_end": 3, "text": "x" * (n * 4), "n_tokens": n,
+                          "centre_text": "y" * 1600, "centre_tokens": 400, "expanded_from": ["a", f"c{rank}", "b"], "row": rank},
+                   score=1.0, rank=rank)
+    hits = [wide(1), wide(2), wide(3), wide(4), wide(5), wide(6)]     # 7,200 tokens
+    out = A.fit_budget(hits, budget=6000)
+    assert [h.rank for h in out] == [1, 2, 3, 4, 5, 6]                 # nothing dropped, order kept
+    assert out[0].chunk["n_tokens"] == 1200 and out[-1].chunk.get("shrunk")   # top kept wide, bottom shrunk
+    assert sum(h.chunk["n_tokens"] for h in out) <= 6000
