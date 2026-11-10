@@ -26,6 +26,7 @@ Indian annual reports are 200–400-page designed PDFs. The answer to "what did 
 | 3 | Hybrid, rerank, cited answers | Done: answerer, CLI, answer eval; two scored runs — see Answer results |
 | 4 | README with results, API, v1.0 | Done: `POST /ask`, before/after eval, v1.0 tag |
 | 5 | Context expansion | Done: nine configurations scored without an LLM; expand k=4 chosen on the curve; answers 58% → 74% correct |
+| 6 | Query rewriting | Done, negative result: multi-query retrieval measured on the quote metric, no gain (0.94 → 0.94) at 3× the latency; kept as an option, not the default |
 
 ## Setup
 
@@ -155,6 +156,17 @@ Then one answer run with the chosen configuration, all 62 questions, same model 
 
 13 verdicts improved, 4 worsened — the first run-to-run change clearly outside the judge's noise (earlier runs: 3 vs 5, 4 vs 6). The two named chunk-boundary cases, HDFC Bank's net interest income and Infosys's free cash flow, went wrong → correct exactly as the quote metric predicted. Most of the gain is *partial → correct*: with the surrounding chunks the model gives the whole answer rather than the half it could see. One cost to note: Groq's free tier caps a single request at 8,000 tokens, which a cross-year question with eight widened passages exceeded; `answer.fit_budget` now shrinks the lowest-ranked expanded hits back to their centre chunk until the request fits. `hybrid+rerank+expand`, k=4, is now the default.
 
+**Query rewriting — tried, measured, not adopted.** The four universal misses looked like a wording gap between question and report, so the obvious next step was multi-query retrieval: a small model writes three rewrites of each question in annual-report language (a statement, a synonym variant, a keyword query), each is searched, and the lists are fused with RRF, the original question weighted double (`+mq` in the retriever name; rewrites cached in `data/eval/rewrites.json`). Scored on the quote metric before any answer run, as with expansion:
+
+| configuration | gold quote retrieved | gold page retrieved | s / question |
+| --- | --- | --- | --- |
+| **rerank + expand, k=4 (default)** | **0.94** | 0.97 | 5.6 |
+| rerank + rewrites + expand, k=4 | 0.94 | 0.95 | 18.6 |
+| rerank + rewrites, k=5 (no expansion) | 0.87 | 0.92 | — |
+| rewrites + expand, k=4 (no reranker) | 0.85 | 0.89 | 0.7 |
+
+No gain, at three times the latency. It is not the same four misses, though: rewriting rescued HUL's Home Care revenue (a table row) and lost a different HUL question that had worked; cross-year went 0.90 → 1.00 while unit traps went 0.90 → 0.80. With four passage slots, every passage a rewrite brings in pushes another out. Three questions miss either way, and the rewrites for them read fine, so the diagnosis above was wrong: these are not wording problems. TCS's deal TCV is half a sentence inside a paragraph about something else; Bajaj's unclaimed deposits is one line among dozens of chunks about fixed deposits; Sun Pharma's FDA issues is one sentence in a long risk section. That is a granularity problem (one fact in a 500-token chunk that is mostly about other things), which points at chunking, not at the query. The two ablation rows are a useful side result: removing expansion or the reranker costs 7 to 9 points each. So no answer run was spent on this, and the default is unchanged. Table: `eval/quote_results_mq.md`.
+
 Full run-3 table: `eval/answer_results_run3.md` (62 questions, correct 58% / partial 23% / wrong 19%, cited gold page 82%). Per-question verdicts and reasons there and in `eval/answer_results.md` (run 4); run-to-run diffs in `eval/compare.md`, `eval/compare_run2_vs_run3.md` and `eval/compare_run3_vs_run4.md`; raw records with retrieved passages and chunk ids in `eval/answers*.jsonl`.
 
 ### How the eval set was built
@@ -170,7 +182,7 @@ src/arqa/
   chunk.py      sections -> ~500-token chunks that know their pages
   units.py      lakh / crore / million / billion / US$ -> ₹ crore, Indian digit grouping
   index.py      BM25 (rank_bm25) + dense (bge-small-en-v1.5, FAISS) over the same chunks
-  retrieve.py   one interface, four retrievers; metadata filters by company / year
+  retrieve.py   one interface, four retrievers, plus +expand (neighbouring chunks) and +mq (query rewrites); metadata filters
   llm.py        one door to the model (Groq or any OpenAI-compatible server), retries, retired-model mapping
   answer.py     retrieve -> read -> JSON answer with citations -> code-side unit normalisation
   ask.py        CLI          api.py   FastAPI
@@ -178,14 +190,15 @@ eval/
   run_eval.py          retrieval metrics per retriever        -> results.md
   run_answer_eval.py   answer accuracy, citation, retrieval   -> answer_results.md (resumable)
   compare_runs.py      before/after between two answer runs   -> compare.md
+  run_quote_eval.py    gold-sentence retrieval per configuration, no LLM -> quote_results*.md
 data/eval/questions.jsonl   62 questions with gold pages and verified quotes
-tests/                      44 tests; parser quirks are pinned one test each
+tests/                      54 tests; parser quirks are pinned one test each
 ```
 
 ## What I'd do next
 
-- **The four questions no configuration retrieves.** With context expansion in, the remaining retrieval misses are queries whose wording is far from the report's ("unclaimed deposits" vs "matured but not claimed"). Next: query rewriting / multi-query retrieval, measured on the gold-quote-retrieved metric first, as this round was.
-- **Sentence-aware chunking** with more overlap would attack the same boundary problem from the other side and might get the 0.94 at a lower token cost than expansion.
+- **The three questions nothing retrieves.** Query rewriting did not move them (see above). Each is a single fact inside a chunk that is mostly about something else, so the next thing to try is on the indexing side: smaller, sentence-aware chunks for retrieval with the parent chunk handed to the model ("small-to-big"), and table rows indexed as their own units with the table's header attached.
+- **Sentence-aware chunking** with more overlap would also attack the boundary problem from the other side and might get the 0.94 at a lower token cost than expansion.
 - **The ₹ glyph problem deserves a proper fix at parse time** — map the stray glyph to ₹ when it precedes a number followed by crore/lakh — rather than scrubbing in the answer.
 - **Judge calibration.** The LLM judge marks conceptual answers "partial" when they cover the main points but not every sub-point of a long gold answer. A rubric per question (which points are required) would make that number mean more.
 - **More companies.** The parser's closers and heading rules were learned from ten layouts; the next ten would teach it more.

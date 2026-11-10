@@ -113,7 +113,12 @@ def render(results: list[dict]) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--configs", default="", help='comma-separated "retriever:k", e.g. "hybrid+rerank:5,bm25+expand:5"')
+    ap.add_argument("--tag", default="", help="suffix for the output files, e.g. 'mq' -> quote_results_mq.md")
     args = ap.parse_args()
+    global OUT_MD, OUT_JSON
+    if args.tag:
+        OUT_MD = OUT_MD.with_name(f"quote_results_{args.tag}.md")
+        OUT_JSON = OUT_JSON.with_name(f"quote_results_{args.tag}.json")
     configs = DEFAULT_CONFIGS
     if args.configs:
         configs = [(c.split(":")[0], int(c.split(":")[1])) for c in args.configs.split(",")]

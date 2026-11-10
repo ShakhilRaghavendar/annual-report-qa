@@ -1,0 +1,171 @@
+[
+  {
+    "retriever": "hybrid+rerank+expand",
+    "k": 4,
+    "summary": {
+      "factual": {
+        "n": 22,
+        "quote": 0.9545454545454546,
+        "page": 1.0
+      },
+      "all": {
+        "n": 62,
+        "quote": 0.9354838709677419,
+        "page": 0.967741935483871
+      },
+      "unit_trap": {
+        "n": 10,
+        "quote": 0.9,
+        "page": 0.9
+      },
+      "conceptual": {
+        "n": 20,
+        "quote": 0.95,
+        "page": 1.0
+      },
+      "cross_year": {
+        "n": 10,
+        "quote": 0.9,
+        "page": 0.9
+      }
+    },
+    "misses": [
+      "TCS-FY24-02",
+      "BAJFINANCE-FY25-06",
+      "SUNPHARMA-FY25-05",
+      "HINDUNILVR-FY25-05"
+    ],
+    "n": 62,
+    "avg_tokens": 5149.354838709677,
+    "seconds": 348.8390235900879
+  },
+  {
+    "retriever": "hybrid+rerank+mq+expand",
+    "k": 4,
+    "summary": {
+      "factual": {
+        "n": 22,
+        "quote": 0.9545454545454546,
+        "page": 0.9545454545454546
+      },
+      "all": {
+        "n": 62,
+        "quote": 0.9354838709677419,
+        "page": 0.9516129032258065
+      },
+      "unit_trap": {
+        "n": 10,
+        "quote": 0.8,
+        "page": 0.8
+      },
+      "conceptual": {
+        "n": 20,
+        "quote": 0.95,
+        "page": 1.0
+      },
+      "cross_year": {
+        "n": 10,
+        "quote": 1.0,
+        "page": 1.0
+      }
+    },
+    "misses": [
+      "TCS-FY24-02",
+      "BAJFINANCE-FY25-06",
+      "SUNPHARMA-FY25-05",
+      "HINDUNILVR-FY25-06"
+    ],
+    "n": 62,
+    "avg_tokens": 5082.709677419355,
+    "seconds": 1153.1683943271637
+  },
+  {
+    "retriever": "hybrid+rerank+mq",
+    "k": 5,
+    "summary": {
+      "factual": {
+        "n": 22,
+        "quote": 0.8636363636363636,
+        "page": 0.9545454545454546
+      },
+      "all": {
+        "n": 62,
+        "quote": 0.8709677419354839,
+        "page": 0.9193548387096774
+      },
+      "unit_trap": {
+        "n": 10,
+        "quote": 0.6,
+        "page": 0.7
+      },
+      "conceptual": {
+        "n": 20,
+        "quote": 0.95,
+        "page": 0.95
+      },
+      "cross_year": {
+        "n": 10,
+        "quote": 1.0,
+        "page": 1.0
+      }
+    },
+    "misses": [
+      "HDFCBANK-FY25-01",
+      "INFY-FY25-01",
+      "INFY-FY25-07",
+      "TCS-FY24-02",
+      "BAJFINANCE-FY25-06",
+      "TATAMOTORS-FY25-06",
+      "SUNPHARMA-FY25-05",
+      "HINDUNILVR-FY25-06"
+    ],
+    "n": 62,
+    "avg_tokens": 2626.5,
+    "seconds": 6640.288539409637
+  },
+  {
+    "retriever": "hybrid+mq+expand",
+    "k": 4,
+    "summary": {
+      "factual": {
+        "n": 22,
+        "quote": 0.8636363636363636,
+        "page": 0.9090909090909091
+      },
+      "all": {
+        "n": 62,
+        "quote": 0.8548387096774194,
+        "page": 0.8870967741935484
+      },
+      "unit_trap": {
+        "n": 10,
+        "quote": 0.9,
+        "page": 0.9
+      },
+      "conceptual": {
+        "n": 20,
+        "quote": 0.9,
+        "page": 0.9
+      },
+      "cross_year": {
+        "n": 10,
+        "quote": 0.7,
+        "page": 0.8
+      }
+    },
+    "misses": [
+      "INFY-FY25-03",
+      "TCS-FY24-02",
+      "RELIANCE-FY24-06",
+      "TATAMOTORS-FY25-03",
+      "TATAMOTORS-FY25-05",
+      "SUNPHARMA-FY25-05",
+      "HINDUNILVR-FY25-01",
+      "HINDUNILVR-FY25-05",
+      "LT-FY25-05"
+    ],
+    "n": 62,
+    "avg_tokens": 5165.9838709677415,
+    "seconds": 40.330049991607666
+  }
+]

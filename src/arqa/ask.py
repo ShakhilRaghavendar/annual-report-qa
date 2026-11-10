@@ -26,7 +26,7 @@ def ask(
     question: str = typer.Argument(..., help="The question, in your own words."),
     ticker: str | None = typer.Option(None, "--ticker", "-t", help="e.g. INFY, HDFCBANK, RELIANCE"),
     fy: list[str] = typer.Option([], "--fy", "-y", help="FY24 or FY25; repeat for a cross-year question"),
-    retriever: str = typer.Option(DEFAULT_RETRIEVER, "--retriever", "-r", help="bm25 | dense | hybrid | hybrid+rerank"),
+    retriever: str = typer.Option(DEFAULT_RETRIEVER, "--retriever", "-r", help="bm25 | dense | hybrid | hybrid+rerank, plus optional +mq (query rewrites) and +expand (neighbouring chunks)"),
     k: int = typer.Option(DEFAULT_K, "--k", help="passages to read (per year for cross-year)"),
     model: str | None = typer.Option(None, "--model", help="override LLM_MODEL"),
     as_json: bool = typer.Option(False, "--json", help="print the full Answer as JSON"),
