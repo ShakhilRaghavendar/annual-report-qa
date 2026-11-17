@@ -1,6 +1,10 @@
 # Annual Report Q&A — hybrid RAG over Indian listed-company annual reports
 
-> v1.0. Ask a question about a Nifty 50 company's annual report and get a cited answer, in ₹ crore, with the passages it came from. Built to compare retrieval strategies honestly, not to demo a chatbot.
+> Ask a question about a Nifty 50 company's annual report and get a cited answer, in ₹ crore, with the passages it came from. Built to compare retrieval strategies honestly, not to demo a chatbot.
+
+![The demo page answering "What EBITDA did Reliance Retail report in FY24 and FY25?": both figures in ₹ crore, cited to pp.9–10 and p.7, with the matching number highlighted on the report page](docs/demo.gif)
+
+*The demo page, recorded on a laptop against the real index (search sped up 3×; the answer took 8.2 s). Run it with `uvicorn arqa.api:app` and open http://127.0.0.1:8000.*
 
 ## Why
 
@@ -13,7 +17,7 @@ Indian annual reports are 200–400-page designed PDFs. The answer to "what did 
 - Four retrievers behind one interface: BM25, dense vector (bge-small / FAISS), hybrid (reciprocal-rank fusion), hybrid + cross-encoder reranker
 - An answerer that reads the top passages with an open-weight model (`openai/gpt-oss-120b` on Groq's free tier), answers with `[n]` citations mapped to company / FY / section / page, and reports every figure in the unit the report used *and* in ₹ crore — the conversion is done in code, never by the model. If the passages don't contain the answer it says so
 - Context expansion: each retrieved chunk is handed to the model with its neighbours, chosen on a measured accuracy-per-token curve
-- A CLI (`python -m arqa.ask`) and a FastAPI endpoint (`POST /ask`)
+- A CLI (`python -m arqa.ask`), a FastAPI endpoint (`POST /ask`), and a one-page demo at `/` that shows the answer beside the report passages it was read from, with the answer's figures highlighted on the page
 - A 62-question evaluation set with page-level gold (every gold quote machine-verified against its page), a retrieval eval (hit rate / recall / MRR per retriever) and an answer eval (LLM judge + a hard citation check + a retrieval-vs-reading split for every miss)
 - Total cost to build and evaluate: ₹0 — Groq free tier, CPU-only embeddings, one laptop
 
@@ -27,6 +31,7 @@ Indian annual reports are 200–400-page designed PDFs. The answer to "what did 
 | 4 | README with results, API, v1.0 | Done: `POST /ask`, before/after eval, v1.0 tag |
 | 5 | Context expansion | Done: nine configurations scored without an LLM; expand k=4 chosen on the curve; answers 58% → 74% correct |
 | 6 | Query rewriting | Done, negative result: multi-query retrieval measured on the quote metric, no gain (0.94 → 0.94) at 3× the latency; kept as an option, not the default |
+| 7 | Demo page | Done: answer, ₹ crore figures and the evidence passages side by side, served by the API at `/` |
 
 ## Setup
 
@@ -49,7 +54,7 @@ python eval/run_eval.py         # score bm25 / dense / hybrid / hybrid+rerank ->
 python -m arqa.ask "What free cash flow did Infosys generate in FY25?" --ticker INFY --fy FY25
 python -m arqa.ask "How did Retail EBITDA move?" --ticker RELIANCE --fy FY24 --fy FY25
 python eval/run_answer_eval.py  # answer accuracy (LLM judge) + citation accuracy -> eval/answer_results.md
-uvicorn arqa.api:app            # HTTP API; try it at http://127.0.0.1:8000/docs
+uvicorn arqa.api:app            # demo page at http://127.0.0.1:8000, API docs at /docs
 pytest -q                       # 44 tests, no network, no model downloads
 ```
 
@@ -185,14 +190,14 @@ src/arqa/
   retrieve.py   one interface, four retrievers, plus +expand (neighbouring chunks) and +mq (query rewrites); metadata filters
   llm.py        one door to the model (Groq or any OpenAI-compatible server), retries, retired-model mapping
   answer.py     retrieve -> read -> JSON answer with citations -> code-side unit normalisation
-  ask.py        CLI          api.py   FastAPI
+  ask.py        CLI          api.py   FastAPI          demo.html   the page served at /
 eval/
   run_eval.py          retrieval metrics per retriever        -> results.md
   run_answer_eval.py   answer accuracy, citation, retrieval   -> answer_results.md (resumable)
   compare_runs.py      before/after between two answer runs   -> compare.md
   run_quote_eval.py    gold-sentence retrieval per configuration, no LLM -> quote_results*.md
 data/eval/questions.jsonl   62 questions with gold pages and verified quotes
-tests/                      54 tests; parser quirks are pinned one test each
+tests/                      55 tests; parser quirks are pinned one test each
 ```
 
 ## What I'd do next

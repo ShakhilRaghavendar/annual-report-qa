@@ -1,7 +1,9 @@
 """
 api.py — the same answerer behind an HTTP endpoint.
 
-    uvicorn arqa.api:app --reload          # http://127.0.0.1:8000/docs
+    uvicorn arqa.api:app --reload          # http://127.0.0.1:8000  (demo page)   /docs (API)
+
+    GET /              the demo page: pick a company, ask, see the answer beside the pages it came from
 
     POST /ask
     {"question": "What free cash flow did Infosys generate in FY25?", "ticker": "INFY", "fy": ["FY25"]}
@@ -18,18 +20,27 @@ and stay in memory after that.
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
-from arqa.answer import DEFAULT_K, DEFAULT_RETRIEVER, answer
+from arqa.answer import DEFAULT_K, DEFAULT_RETRIEVER, answer, scrub_rupee
 from arqa.retrieve import _meta
 
 app = FastAPI(
     title="Annual Report Q&A",
     description="Cited answers from Indian listed-company annual reports (hybrid RAG). Figures normalised to ₹ crore.",
-    version="1.0.0",
+    version="1.2.0",
 )
+
+DEMO_PAGE = Path(__file__).with_name("demo.html")
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def demo() -> str:
+    return DEMO_PAGE.read_text(encoding="utf-8")
 
 
 class AskRequest(BaseModel):
@@ -63,4 +74,8 @@ def ask(req: AskRequest) -> dict:
                    k=req.k, retriever=req.retriever)
     except RuntimeError as e:  # missing API key and the like
         raise HTTPException(status_code=503, detail=str(e)) from e
-    return a.to_dict()
+    d = a.to_dict()
+    # The text of each passage, in the same order as d["passages"], so a client can
+    # show the evidence next to the answer. (PDF extraction garbles the ₹ glyph.)
+    d["passage_texts"] = [scrub_rupee(h.chunk["text"]) for h in a.hits]
+    return d

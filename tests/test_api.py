@@ -34,3 +34,19 @@ def test_health_counts_reports(monkeypatch):
         {"ticker": "ICICIBANK", "fy": "FY25", "part": "fs"}])
     r = TestClient(api.app).get("/health").json()
     assert r == {"status": "ok", "chunks": 3, "reports": 2}
+
+
+def test_demo_page_is_served_and_ask_carries_passage_texts(monkeypatch):
+    from arqa.retrieve import Hit
+
+    def fake(question, ticker=None, fy=None, k=5, retriever="hybrid+rerank", model=None):
+        a = _fake_answer(question, ticker, fy, k, retriever, model)
+        a.hits = [Hit(chunk={"text": "Free cash flow was `34,549 crore."}, score=1.0, rank=1)]
+        return a
+
+    monkeypatch.setattr(api, "answer", fake)
+    client = TestClient(api.app)
+    page = client.get("/")
+    assert page.status_code == 200 and "Annual Report Q&amp;A" in page.text
+    body = client.post("/ask", json={"question": "What was FCF?", "ticker": "INFY", "fy": ["FY25"]}).json()
+    assert body["passage_texts"] == ["Free cash flow was ₹34,549 crore."]

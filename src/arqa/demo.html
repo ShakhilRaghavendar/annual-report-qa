@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Annual Report Q&amp;A</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --desk: #E9EDF3;        /* the surface the pages lie on */
+    --sheet: #FFFFFF;       /* a page */
+    --ink: #0F1E3D;         /* fountain-pen navy: all text */
+    --ink-soft: #55637D;
+    --rule: #CDD5E1;
+    --marker: #FFDD55;      /* highlighter: evidence only, nothing else is yellow */
+    --marker-deep: #B8860B;
+    --ledger: #0B6B55;      /* rupee figures */
+    --alarm: #A3271F;
+    --ui: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+    --prose: "Newsreader", "Georgia", serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--desk); color: var(--ink); font: 15px/1.45 var(--ui); display: flex; flex-direction: column; }
+  button, select, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  /* ---- ask bar ---- */
+  .ask { background: var(--ink); color: #fff; padding: 18px 28px 16px; }
+  .ask-top { display: flex; align-items: baseline; gap: 16px; margin-bottom: 12px; }
+  .ask h1 { font: 500 19px/1 var(--prose); margin: 0; letter-spacing: .01em; }
+  .ask .scope { color: #AEBBD3; font-size: 13px; }
+  .ask form { display: grid; grid-template-columns: 220px auto 1fr auto; gap: 10px; align-items: stretch; }
+  .ask select, .ask textarea { background: #fff; color: var(--ink); border: 0; border-radius: 3px; padding: 10px 12px; }
+  .ask textarea { resize: none; height: 44px; font: 400 18px/1.3 var(--prose); padding-top: 10px; }
+  .years { display: flex; border-radius: 3px; overflow: hidden; }
+  .years label { background: #24365F; color: #C9D3E6; padding: 0 14px; display: flex; align-items: center; cursor: pointer; font-weight: 500; user-select: none; }
+  .years label + label { border-left: 1px solid var(--ink); }
+  .years input { position: absolute; opacity: 0; pointer-events: none; }
+  .years label:has(input:checked) { background: #fff; color: var(--ink); }
+  .years label:has(input:focus-visible) { outline: 2px solid var(--marker); outline-offset: -2px; }
+  .go { background: var(--marker); color: var(--ink); border: 0; border-radius: 3px; padding: 0 22px; font-weight: 600; cursor: pointer; }
+  .go[disabled] { opacity: .55; cursor: progress; }
+  .samples { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; font-size: 13px; color: #AEBBD3; }
+  .samples button { background: none; border: 1px solid #3A4D78; color: #DCE4F2; border-radius: 99px; padding: 3px 11px; cursor: pointer; }
+  .samples button:hover { border-color: #fff; color: #fff; }
+
+  /* ---- result: answer on the left, the pages on the right ---- */
+  main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 11fr) minmax(0, 10fr); }
+  .answer-col { padding: 30px 34px 28px 28px; overflow-y: auto; }
+  .pages-col { padding: 26px 28px 28px 8px; overflow-y: auto; }
+
+  .asked { color: var(--ink-soft); font-size: 14px; margin: 0 0 10px; }
+  .answer { font: 400 27px/1.38 var(--prose); margin: 0; max-width: 31em; text-wrap: pretty; }
+  .answer.notfound { color: var(--ink-soft); font-size: 22px; }
+  .tag { font: 600 12px/1 var(--ui); background: var(--marker); color: var(--ink); border: 0; border-radius: 2px; padding: 3px 6px 3px; margin: 0 2px; vertical-align: .32em; cursor: pointer; white-space: nowrap; }
+  .tag:hover { box-shadow: 0 0 0 2px var(--ink); }
+
+  .ledger { margin: 26px 0 0; border-collapse: collapse; width: 100%; max-width: 620px; font-variant-numeric: tabular-nums; }
+  .ledger caption { text-align: left; font-weight: 600; font-size: 13px; padding-bottom: 6px; color: var(--ink-soft); }
+  .ledger th, .ledger td { text-align: left; padding: 8px 14px 8px 0; border-top: 1px solid var(--rule); vertical-align: baseline; }
+  .ledger tr:last-child > * { border-bottom: 1px solid var(--rule); }
+  .ledger th { font-weight: 400; }
+  .ledger td.stated { color: var(--ink-soft); white-space: nowrap; }
+  .ledger td.crore { text-align: right; padding-right: 0; font-weight: 600; color: var(--ledger); white-space: nowrap; }
+  .ledger td.crore.none { color: var(--ink-soft); font-weight: 400; }
+  .how { margin: 22px 0 0; color: var(--ink-soft); font-size: 13px; max-width: 46em; }
+
+  .sheet { position: relative; background: var(--sheet); margin: 0 0 14px 46px; padding: 16px 20px 16px 22px; box-shadow: 0 1px 0 #BFC8D6, 0 6px 14px -8px rgba(15, 30, 61, .35); }
+  .sheet .folio { position: absolute; right: 100%; top: 14px; width: 46px; text-align: right; padding-right: 9px; font: 600 12px/1.2 var(--ui); color: var(--ink-soft); }
+  .sheet .folio b { display: block; font: 500 22px/1 var(--prose); color: var(--ink); }
+  .sheet.cited .folio b { background: var(--marker); display: inline-block; padding: 2px 5px 1px; margin-right: -5px; }
+  .sheet header { font-size: 13px; color: var(--ink-soft); margin-bottom: 8px; display: flex; justify-content: space-between; gap: 12px; }
+  .sheet header strong { color: var(--ink); font-weight: 600; }
+  .sheet header span:last-child { white-space: nowrap; }
+  .sheet p { font: 400 16px/1.55 var(--prose); margin: 0; overflow-wrap: anywhere; }
+  .sheet mark { background: var(--marker); color: inherit; padding: 1px 2px; margin: 0 -2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .sheet .more { margin-top: 8px; background: none; border: 0; padding: 0; color: var(--ink-soft); font-size: 13px; text-decoration: underline; cursor: pointer; }
+  .sheet.unused { background: #F6F8FB; box-shadow: 0 1px 0 #CDD5E1; }
+  .sheet.unused p { color: var(--ink-soft); font-size: 15px; }
+  .sheet.flash { animation: flash .9s ease-out; }
+  @keyframes flash { from { box-shadow: 0 0 0 3px var(--marker-deep); } to { box-shadow: 0 0 0 3px transparent; } }
+  .pages-note { margin: 2px 0 12px 46px; font-size: 13px; color: var(--ink-soft); }
+
+  /* ---- empty, waiting, failed ---- */
+  .state { grid-column: 1 / -1; align-self: center; justify-self: center; text-align: center; max-width: 34em; padding: 40px 24px; }
+  .state h2 { font: 400 30px/1.25 var(--prose); margin: 0 0 10px; }
+  .state p { color: var(--ink-soft); margin: 0; }
+  .state.failed h2 { color: var(--alarm); }
+  .clock { font: 500 44px/1 var(--prose); font-variant-numeric: tabular-nums; margin-bottom: 14px; }
+
+  @media (max-width: 900px) {
+    body { height: auto; }
+    .ask-top { display: block; }
+    .ask h1 { margin-bottom: 6px; }
+    .ask form { grid-template-columns: 1fr; }
+    .years label { flex: 1; justify-content: center; padding: 10px 0; }
+    .ask textarea { height: 74px; }
+    .go { padding: 12px 0; }
+    .sheet { margin-left: 40px; }
+    .pages-note { margin-left: 0; }
+    main { display: block; }
+    .answer-col, .pages-col { padding: 22px 16px; overflow: visible; }
+    .answer { font-size: 22px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .sheet.flash { animation: none; } }
+</style>
+</head>
+<body>
+
+<section class="ask">
+  <div class="ask-top">
+    <h1>Annual Report Q&amp;A</h1>
+    <span class="scope" id="scope">Ask a question of an Indian company's annual report. Every answer shows the page it came from.</span>
+  </div>
+  <form id="form">
+    <select id="ticker" aria-label="Company"></select>
+    <div class="years" role="group" aria-label="Financial year">
+      <label><input type="checkbox" name="fy" value="FY24">FY24</label>
+      <label><input type="checkbox" name="fy" value="FY25" checked>FY25</label>
+    </div>
+    <textarea id="q" aria-label="Your question" placeholder="What do you want to know?" required minlength="5"></textarea>
+    <button class="go" id="go">Ask the report</button>
+  </form>
+  <div class="samples" id="samples"><span>Try:</span></div>
+</section>
+
+<main id="out">
+  <div class="state">
+    <h2>Pick a company and ask something.</h2>
+    <p>The answer appears here with its figures converted to ₹ crore, and the report pages it was read from appear beside it.</p>
+  </div>
+</main>
+
+<script>
+const NAMES = { BAJFINANCE: "Bajaj Finance", HDFCBANK: "HDFC Bank", HINDUNILVR: "Hindustan Unilever", ICICIBANK: "ICICI Bank",
+  INFY: "Infosys", LT: "Larsen & Toubro", RELIANCE: "Reliance Industries", SUNPHARMA: "Sun Pharma",
+  TCS: "Tata Consultancy Services", TATAMOTORS: "Tata Motors" };
+const SAMPLES = [
+  ["Infosys free cash flow", "INFY", ["FY25"], "What free cash flow did Infosys generate in fiscal 2025?"],
+  ["Reliance Retail, two years", "RELIANCE", ["FY24", "FY25"], "What EBITDA did Reliance Retail report in FY24 and FY25?"],
+  ["HDFC Bank interest income", "HDFCBANK", ["FY25"], "What was HDFC Bank's net interest income in FY25, and how much did it grow?"],
+  ["Sun Pharma, dollars only", "SUNPHARMA", ["FY25"], "What was Sun Pharma's global specialty revenue in FY25, in rupees crore?"],
+  ["Infosys Project Maximus", "INFY", ["FY25"], "What is Project Maximus at Infosys and what levers does it use to expand margins?"],
+];
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const pages = (c) => c.page_start === c.page_end ? `p.${c.page_start}` : `pp.${c.page_start}–${c.page_end}`;
+const inr = (x) => "₹ " + Number(x).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " crore";
+
+/* company list comes from the index itself */
+fetch("/reports").then((r) => r.json()).then((rows) => {
+  const tickers = [...new Set(rows.map((r) => r.ticker))].sort((a, b) => (NAMES[a] || a).localeCompare(NAMES[b] || b));
+  $("ticker").innerHTML = tickers.map((t) => `<option value="${esc(t)}">${esc(NAMES[t] || t)}</option>`).join("");
+  $("ticker").value = "INFY";
+  $("scope").textContent = `${tickers.length} companies, ${rows.reduce((n, r) => n + r.chunks, 0).toLocaleString("en-IN")} passages indexed. Every answer shows the page it came from.`;
+}).catch(() => {
+  $("ticker").innerHTML = Object.entries(NAMES).map(([t, n]) => `<option value="${t}">${n}</option>`).join("");
+});
+
+for (const [label, t, fys, text] of SAMPLES) {
+  const b = document.createElement("button");
+  b.type = "button"; b.textContent = label;
+  b.onclick = () => { $("ticker").value = t; setYears(fys); $("q").value = text; ask(); };
+  $("samples").append(b);
+}
+function setYears(fys) { document.querySelectorAll("input[name=fy]").forEach((i) => { i.checked = fys.includes(i.value); }); }
+function years() { return [...document.querySelectorAll("input[name=fy]:checked")].map((i) => i.value); }
+
+$("q").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); } });
+$("form").addEventListener("submit", (e) => { e.preventDefault(); ask(); });
+
+let timer = null, asking = 0;
+async function ask() {
+  const mine = ++asking;   /* a slow earlier answer must not overwrite a newer question */
+  const question = $("q").value.trim();
+  if (question.length < 5) { $("q").focus(); return; }
+  const fy = years();
+  if (!fy.length) { setYears(["FY25"]); fy.push("FY25"); }
+  const t0 = performance.now();
+  $("go").disabled = true;
+  $("out").innerHTML = `<div class="state"><div class="clock" id="clock">0.0 s</div>
+    <h2>Searching the ${esc(NAMES[$("ticker").value] || $("ticker").value)} ${fy.join(" and ")} report${fy.length > 1 ? "s" : ""}</h2>
+    <p>Keyword and meaning search, rerank, then the model reads the best passages. The first question after starting up takes about a minute while the search models load.</p></div>`;
+  clearInterval(timer);
+  timer = setInterval(() => { const c = $("clock"); if (c) c.textContent = ((performance.now() - t0) / 1000).toFixed(1) + " s"; }, 100);
+  try {
+    const r = await fetch("/ask", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, ticker: $("ticker").value, fy }) });
+    const body = await r.json().catch(() => null);
+    if (!r.ok || !body) throw new Error(body && body.detail ? (typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail)) : `The server answered ${r.status}. Look at the black window that started the demo for the reason.`);
+    if (mine === asking) render(body);
+  } catch (err) {
+    if (mine !== asking) return;
+    $("out").innerHTML = `<div class="state failed"><h2>That question didn't go through.</h2><p>${esc(err.message)}</p>
+      <p style="margin-top:8px">If this mentions a rate limit, the free model quota is used up for now. Wait a few minutes and ask again.</p></div>`;
+  } finally {
+    if (mine === asking) { clearInterval(timer); $("go").disabled = false; }
+  }
+}
+
+/* A figure's number as it would be printed on the page: 34549 matches "34,549", "34549", "3,45,49". */
+function numberPattern(value) {
+  const [int, frac = ""] = String(Math.abs(value)).split(".");
+  let p = int.split("").join(",?");
+  if (frac && Number(frac) !== 0) p += "\\." + frac + "\\d*"; else p += "(?:\\.\\d+)?";
+  return "(?<![\\d.,])" + p + "(?![\\d]|,\\d)";
+}
+function highlight(text, figures) {
+  /* A bare "4" or "12" would light up half the page. Long numbers are evidence on their own;
+     short ones ("4.1", "21") only count when the page prints a unit right after them. */
+  const UNIT = "\\s*(?:%|per\\s?cent|billion|million|crore|crores|cr\\b|lakh|lakhs|bn\\b|mn\\b)";
+  const pats = figures.map((f) => String(Math.abs(f.value)).replace(".", "").length >= 3
+    ? numberPattern(f.value) : numberPattern(f.value) + UNIT);
+  if (!pats.length) return { html: esc(text), first: -1 };
+  const re = new RegExp(pats.join("|"), "g");
+  let html = "", last = 0, first = -1, m;
+  while ((m = re.exec(text))) {
+    if (first < 0) first = m.index;
+    html += esc(text.slice(last, m.index)) + "<mark>" + esc(m[0]) + "</mark>";
+    last = m.index + m[0].length;
+  }
+  return { html: html + esc(text.slice(last)), first };
+}
+/* Show the part of a long passage around the evidence; the rest is one click away. */
+/* For an answer without numbers: where in the passage do the answer's own words cluster? */
+const STOP = new Set("the a an and or of to in on for with by as at is are was were be been it its this that from which into their our has have had also such other than more most".split(" "));
+function bestWindow(flat, answer, span) {
+  const words = new Set((answer.toLowerCase().match(/[a-z][a-z\-]{3,}/g) || []).filter((w) => !STOP.has(w)));
+  if (!words.size) return -1;
+  const toks = [...flat.matchAll(/[A-Za-z][A-Za-z\-]{3,}/g)];
+  let best = -1, bestScore = 1;
+  for (let i = 0; i < toks.length; i++) {
+    if (!words.has(toks[i][0].toLowerCase())) continue;   /* windows open on a matching word */
+    const start = toks[i].index, seen = new Set();
+    for (let j = i; j < toks.length && toks[j].index < start + span * 0.6; j++) {
+      const w = toks[j][0].toLowerCase(); if (words.has(w)) seen.add(w);
+    }
+    if (seen.size > bestScore) { bestScore = seen.size; best = start; }
+  }
+  return best;
+}
+function excerpt(text, figures, span = 520, answer = "") {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const probe = highlight(flat, figures);
+  if (flat.length <= span + 120) return { html: probe.html, cut: false, full: probe.html };
+  let lead = 170;
+  if (probe.first < 0 && answer) {
+    const w = bestWindow(flat, answer, span);
+    if (w >= 0) { probe.first = w; lead = 40; }   /* text answers: open right at the matching sentence */
+  }
+  /* start a little before the evidence, at a sentence start if there is one in reach */
+  let a = probe.first < 0 ? 0 : Math.max(0, probe.first - lead);
+  if (a > 0) {
+    const lead = flat.slice(a, probe.first), stop = lead.search(/[.!?] [A-Z]/);
+    a = stop >= 0 ? a + stop + 2 : flat.indexOf(" ", a) + 1;
+  }
+  let b = Math.min(flat.length, a + span);
+  b = b === flat.length ? b : flat.lastIndexOf(" ", b);
+  const part = highlight(flat.slice(a, b), figures);
+  return { html: (a ? "… " : "") + part.html + (b < flat.length ? " …" : ""), cut: true, full: probe.html };
+}
+
+function render(d) {
+  const cited = new Set(d.citations.map((c) => c.n));
+  const texts = d.passage_texts || [];
+  const answerHtml = esc(d.answer).replace(/\[(\d+)\]/g, (_, n) => {
+    const c = d.passages[n - 1];
+    return c ? `<button class="tag" data-n="${n}" title="Show the passage this came from">${pages(c)}</button>` : "";
+  });
+
+  let ledger = "";
+  if (d.figures.length) {
+    ledger = `<table class="ledger"><caption>Figures, converted to ₹ crore by code, not by the model</caption>` +
+      d.figures.map((f) => {
+        const stated = f.unit === "percent" ? `${f.value}%` : f.unit === "count" || f.unit === "other" ? Number(f.value).toLocaleString("en-IN")
+          : `${f.currency === "INR" ? "₹" : esc(f.currency)} ${Number(f.value).toLocaleString("en-IN")} ${esc(f.unit)}`;
+        const crore = f.crore != null ? `<td class="crore">${inr(f.crore)}</td>`
+          : f.currency && f.currency !== "INR" ? `<td class="crore none">stated in ${esc(f.currency)} only</td>` : `<td class="crore none"></td>`;
+        return `<tr><th scope="row">${esc(f.label)}</th><td class="stated">${stated}</td>${crore}</tr>`;
+      }).join("") + `</table>`;
+  }
+
+  const order = d.passages.map((c, i) => ({ c, i })).sort((x, y) => cited.has(y.c.n) - cited.has(x.c.n));
+  const sheets = order.map(({ c, i }) => {
+    const isCited = cited.has(c.n);
+    const figs = isCited ? d.figures.filter((f) => f.citation === c.n || f.citation == null) : [];
+    const ex = excerpt(texts[i] || "", figs, isCited ? 430 : 200, isCited ? d.answer : "");
+    return `<article class="sheet ${isCited ? "cited" : "unused"}" id="sheet-${c.n}">
+      <div class="folio">page<b>${c.page_start}</b></div>
+      <header><span><strong>${esc(NAMES[c.ticker] || c.ticker)} ${esc(c.fy)}</strong>, ${esc(c.section)}, ${pages(c)}</span>
+        <span>${isCited ? "used in the answer" : "retrieved, not used"}</span></header>
+      <p>${ex.html}</p>
+      ${ex.cut ? `<button class="more" type="button">Show the whole passage</button><template>${ex.full}</template>` : ""}
+    </article>`;
+  }).join("");
+
+  $("out").innerHTML = `
+    <section class="answer-col">
+      <p class="asked">${esc(d.question)}</p>
+      <p class="answer ${d.found ? "" : "notfound"}">${d.found ? "" : "Not found in the passages retrieved. "}${answerHtml}</p>
+      ${ledger}
+      <p class="how">Answered in ${d.latency_s.toFixed(1)} s from ${d.passages.length} passages, ${cited.size} of them cited. Search: ${esc(d.retriever)}. Model: ${esc(d.model)}.</p>
+    </section>
+    <section class="pages-col" aria-label="Report passages">
+      <p class="pages-note">What the model was given to read. Highlighted numbers are the figures in the answer, found on the page.</p>
+      ${sheets}
+    </section>`;
+
+  $("out").querySelectorAll(".tag").forEach((b) => b.onclick = () => {
+    const s = $("sheet-" + b.dataset.n);
+    if (!s) return;
+    s.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    s.classList.remove("flash"); void s.offsetWidth; s.classList.add("flash");
+  });
+  $("out").querySelectorAll(".more").forEach((b) => b.onclick = () => {
+    b.previousElementSibling.innerHTML = b.nextElementSibling.innerHTML; b.nextElementSibling.remove(); b.remove();
+  });
+}
+</script>
+</body>
+</html>
